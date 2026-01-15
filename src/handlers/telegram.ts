@@ -62,6 +62,8 @@ export class TelegramHandler {
     this.fileBrowserHandler = new FileBrowserHandler(this.storage, this.directory, this.formatter, this.config, this.bot);
     this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.bot, this.permissionManager);
 
+    // Connect progress manager to tool handler
+    this.toolHandler.setProgressManager(this.messageHandler.getProgressManager());
 
     this.setupHandlers();
   }
@@ -72,6 +74,8 @@ export class TelegramHandler {
 
     // If message is null, this indicates completion
     if (!message) {
+      // Complete progress tracking
+      await this.messageHandler.getProgressManager().completeProgress(chatId, true);
       return;
     }
 
@@ -81,6 +85,9 @@ export class TelegramHandler {
   public async handleClaudeError(userId: string, error: string): Promise<void> {
     const chatId = parseInt(userId);
     if (isNaN(chatId)) return;
+
+    // Complete progress tracking on error
+    await this.messageHandler.getProgressManager().completeProgress(chatId, false);
 
     try {
       await this.bot.telegram.sendMessage(

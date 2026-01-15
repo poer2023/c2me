@@ -9,9 +9,11 @@ import { ClaudeManager } from '../../claude';
 import { ProjectHandler } from '../project/project-handler';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
+import { ProgressManager } from '../../../utils/progress-manager';
 
 export class MessageHandler {
   private telegramSender: TelegramSender;
+  private progressManager: ProgressManager;
 
   constructor(
     private storage: IStorage,
@@ -22,6 +24,14 @@ export class MessageHandler {
     private bot: Telegraf
   ) {
     this.telegramSender = new TelegramSender(bot);
+    this.progressManager = new ProgressManager(bot);
+  }
+
+  /**
+   * Get progress manager instance
+   */
+  getProgressManager(): ProgressManager {
+    return this.progressManager;
   }
 
   async handleTextMessage(ctx: Context): Promise<void> {
@@ -57,10 +67,33 @@ export class MessageHandler {
 
   async handleSessionInput(ctx: Context, user: UserSessionModel, text: string): Promise<void> {
     try {
-      await ctx.reply('Processing...', KeyboardFactory.createCompletionKeyboard());
+      // Send initial status message and get message ID
+      const statusMessage = await ctx.reply(
+        '⏳ Processing (0s)',
+        KeyboardFactory.createCompletionKeyboard()
+      );
+
+      // Start progress tracking
+      if (statusMessage && 'message_id' in statusMessage) {
+        await this.progressManager.startProgress(
+          user.chatId,
+          statusMessage.message_id
+        );
+      }
+
       await this.claudeSDK.addMessageToStream(user.chatId, text);
     } catch (error) {
-      await ctx.reply(this.formatter.formatError(MESSAGES.ERRORS.SEND_INPUT_FAILED(error instanceof Error ? error.message : 'Unknown error')), { parse_mode: 'MarkdownV2' });
+      // Complete progress tracking on error
+      await this.progressManager.completeProgress(user.chatId, false);
+
+      await ctx.reply(
+        this.formatter.formatError(
+          MESSAGES.ERRORS.SEND_INPUT_FAILED(
+            error instanceof Error ? error.message : 'Unknown error'
+          )
+        ),
+        { parse_mode: 'MarkdownV2' }
+      );
     }
   }
 
@@ -86,29 +119,43 @@ export class MessageHandler {
   }
 
   /**
-   * 无项目模式：直接使用默认工作目录启动会话
+   * No-project mode: start session directly with default working directory
    */
   private async startDirectSession(ctx: Context, user: UserSessionModel, text: string): Promise<void> {
     try {
-      // 使用默认工作目录
+      // Use default working directory
       const defaultWorkDir = process.env.WORK_DIR || '/tmp/tg-claudecode';
 
-      // 确保目录存在
+      // Ensure directory exists
       const fs = await import('fs');
       if (!fs.existsSync(defaultWorkDir)) {
         fs.mkdirSync(defaultWorkDir, { recursive: true });
       }
 
-      // 设置用户状态为会话中
+      // Set user state to in session
       user.projectPath = defaultWorkDir;
       user.state = UserState.InSession;
       await this.storage.saveUserSession(user);
 
-      // 发送消息给 Claude
-      await ctx.reply('处理中...', KeyboardFactory.createCompletionKeyboard());
+      // Send initial status message
+      const statusMessage = await ctx.reply(
+        '⏳ Processing (0s)',
+        KeyboardFactory.createCompletionKeyboard()
+      );
+
+      // Start progress tracking
+      if (statusMessage && 'message_id' in statusMessage) {
+        await this.progressManager.startProgress(
+          user.chatId,
+          statusMessage.message_id
+        );
+      }
+
       await this.claudeSDK.addMessageToStream(user.chatId, text);
     } catch (error) {
-      await ctx.reply(`启动会话失败: ${error instanceof Error ? error.message : '未知错误'}`);
+      // Complete progress tracking on error
+      await this.progressManager.completeProgress(user.chatId, false);
+      await ctx.reply(`Failed to start session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
