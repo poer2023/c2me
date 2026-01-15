@@ -10,6 +10,7 @@ import { ProjectHandler } from '../project/project-handler';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { ProgressManager } from '../../../utils/progress-manager';
+import { incrementCounter, startTiming } from '../../../utils/metrics';
 
 export class MessageHandler {
   private telegramSender: TelegramSender;
@@ -39,6 +40,10 @@ export class MessageHandler {
     const chatId = ctx.chat.id;
     const text = ctx.message.text;
 
+    // Track incoming message
+    incrementCounter('messages_received');
+    const stopTimer = startTiming('message_processing_time');
+
     const user = await this.storage.getUserSession(chatId);
     if (!user) {
       await this.sendHelp(ctx);
@@ -63,6 +68,9 @@ export class MessageHandler {
           await this.startDirectSession(ctx, user, text);
         }
     }
+
+    // Stop message processing timer
+    stopTimer();
   }
 
   async handleSessionInput(ctx: Context, user: UserSessionModel, text: string): Promise<void> {

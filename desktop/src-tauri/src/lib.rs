@@ -256,8 +256,10 @@ fn get_bot_health(state: State<BotState>) -> BotHealth {
 
 #[tauri::command]
 fn get_project_path() -> String {
-    // Path to the chatcode project
-    "/Users/wanghao/Project/c2me".to_string()
+    // Try to get from environment variable, fallback to default
+    std::env::var("C2ME_PROJECT_PATH")
+        .or_else(|_| std::env::var("HOME").map(|h| format!("{}/Project/c2me", h)))
+        .unwrap_or_else(|_| "/tmp/c2me".to_string())
 }
 
 #[tauri::command]

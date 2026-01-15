@@ -4,12 +4,14 @@ import { getFormattable } from '@gramio/format';
 import type { MessageEntity as TelegramMessageEntity }
   from 'telegraf/types';
 import { markdownToTelegramEntities, MessageEntity } from './markdownToTelegramEntities';
+import { incrementCounter, startTiming } from '../utils/metrics';
 
 export class TelegramSender {
   constructor(private bot: Telegraf) { }
 
   async safeSendMessage(chatId: number, message: string, options: any = {}): Promise<any> {
     const limit = 4096;
+    const stopTimer = startTiming('telegram_send_time');
 
     let lastMessage: any;
     const parsed = markdownToTelegramEntities(message);
@@ -28,11 +30,13 @@ export class TelegramSender {
           entities: entities as any,
           ...options
         });
+        incrementCounter('messages_sent');
         return lastMessage;
       },
       limit
     );
 
+    stopTimer();
     return lastMessage;
   }
 

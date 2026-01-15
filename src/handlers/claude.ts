@@ -3,6 +3,7 @@ import { IStorage } from '../storage/interface';
 import { TargetTool } from '../models/types';
 import { PermissionManager } from './permission-manager';
 import { StreamManager } from '../utils/stream-manager';
+import { incrementCounter, startTiming, incrementGauge, decrementGauge } from '../utils/metrics';
 
 export class ClaudeManager {
   private storage: IStorage;
@@ -65,6 +66,11 @@ export class ClaudeManager {
       throw new Error('User session not found');
     }
 
+    // Track metrics
+    incrementCounter('claude_requests');
+    incrementGauge('active_sessions');
+    const stopTimer = startTiming('claude_response_time');
+
     try {
       for await (const message of query({
         prompt,
@@ -80,9 +86,20 @@ export class ClaudeManager {
         const toolInfo = this.extractToolInfo(message);
         const parentToolUseId = (message as any).parent_tool_use_id || undefined;
 
+        // Track tool usage
+        if (toolInfo?.isToolUse) {
+          incrementCounter('tool_uses');
+        }
+
         await this.onClaudeResponse(chatId.toString(), message, toolInfo, parentToolUseId);
       }
+
+      // Track successful response
+      incrementCounter('claude_responses');
     } catch (error) {
+      // Track errors
+      incrementCounter('errors');
+
       // Don't throw error if it's caused by abort
       if (error instanceof AbortError) {
         return;
@@ -91,6 +108,10 @@ export class ClaudeManager {
       this.onClaudeError?.(chatId.toString(), error instanceof Error ? error.message : 'Unknown error');
       throw error;
     } finally {
+      // Stop timing and update gauges
+      stopTimer();
+      decrementGauge('active_sessions');
+
       // Signal completion with null message to indicate completion
       this.onClaudeResponse(chatId.toString(), null, undefined, undefined);
     }
