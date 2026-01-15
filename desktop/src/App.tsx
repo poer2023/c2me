@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { LiquidGlassFilters } from './components/LiquidGlassFilters';
 import './App.css';
 
@@ -11,6 +12,12 @@ interface BotStatus {
 
 interface Config {
   [key: string]: string;
+}
+
+interface LogEntry {
+  level: string;
+  message: string;
+  timestamp: string;
 }
 
 function formatUptime(seconds: number): string {
@@ -30,14 +37,57 @@ function App() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
   const [config, setConfig] = useState<Config | null>(null);
-  const [activeTab, setActiveTab] = useState<'status' | 'config'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'logs' | 'config'>('status');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch project path on mount
   useEffect(() => {
     invoke<string>('get_project_path').then(setProjectPath);
   }, []);
+
+  // Listen for log events
+  useEffect(() => {
+    const unlisten = listen<LogEntry>('bot-log', (event) => {
+      setLogs((prev) => [...prev.slice(-499), event.payload]); // Keep last 500 logs
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Listen for menu events (from native macOS menu bar)
+  useEffect(() => {
+    const unlistenLogs = listen('show-logs', () => {
+      setActiveTab('logs');
+    });
+    const unlistenSettings = listen('show-settings', () => {
+      setActiveTab('config');
+    });
+    const unlistenStatus = listen<string>('bot-status', (event) => {
+      showMessage('success', event.payload);
+    });
+    const unlistenError = listen<string>('bot-error', (event) => {
+      showMessage('error', event.payload);
+    });
+
+    return () => {
+      unlistenLogs.then((fn) => fn());
+      unlistenSettings.then((fn) => fn());
+      unlistenStatus.then((fn) => fn());
+      unlistenError.then((fn) => fn());
+    };
+  }, []);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      logsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, activeTab]);
 
   // Poll status every second
   useEffect(() => {
@@ -104,6 +154,17 @@ function App() {
     setLoading(false);
   };
 
+  const restartBot = async () => {
+    setLoading(true);
+    try {
+      const result = await invoke<string>('restart_bot', { projectPath });
+      showMessage('success', result);
+    } catch (error) {
+      showMessage('error', `${error}`);
+    }
+    setLoading(false);
+  };
+
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
@@ -127,6 +188,12 @@ function App() {
             onClick={() => setActiveTab('status')}
           >
             Status
+          </button>
+          <button
+            className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
+            onClick={() => setActiveTab('logs')}
+          >
+            Logs {logs.length > 0 && <span className="log-count">({logs.length})</span>}
           </button>
           <button
             className={`tab ${activeTab === 'config' ? 'active' : ''}`}
@@ -165,14 +232,48 @@ function App() {
 
           <div className="controls">
             {status?.is_running ? (
-              <button className="btn btn-danger" onClick={stopBot} disabled={loading}>
-                {loading ? 'Stopping...' : 'Stop Bot'}
-              </button>
+              <>
+                <button className="btn btn-secondary" onClick={restartBot} disabled={loading}>
+                  {loading ? 'Restarting...' : 'Restart Bot'}
+                </button>
+                <button className="btn btn-danger" onClick={stopBot} disabled={loading}>
+                  {loading ? 'Stopping...' : 'Stop Bot'}
+                </button>
+              </>
             ) : (
               <button className="btn btn-primary" onClick={startBot} disabled={loading}>
                 {loading ? 'Starting...' : 'Start Bot'}
               </button>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'logs' && (
+        <div className="logs-panel">
+          <div className="logs-header">
+            <span className="logs-title">Bot Logs</span>
+            <button
+              className="btn btn-secondary btn-small"
+              onClick={() => setLogs([])}
+              disabled={logs.length === 0}
+            >
+              Clear Logs
+            </button>
+          </div>
+          <div className="logs-container">
+            {logs.length === 0 ? (
+              <div className="logs-empty">No logs yet. Start the bot to see logs.</div>
+            ) : (
+              logs.map((log, index) => (
+                <div key={index} className={`log-entry log-${log.level}`}>
+                  <span className="log-timestamp">{log.timestamp}</span>
+                  <span className={`log-level log-level-${log.level}`}>{log.level.toUpperCase()}</span>
+                  <span className="log-message">{log.message}</span>
+                </div>
+              ))
+            )}
+            <div ref={logsEndRef} />
           </div>
         </div>
       )}

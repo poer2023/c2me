@@ -1,10 +1,13 @@
 use serde::Serialize;
+use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder},
     tray::TrayIconBuilder,
-    Manager, State, Emitter, RunEvent, WindowEvent,
+    AppHandle, Emitter, Manager, RunEvent, State, WindowEvent,
 };
 
 // Bot process state
@@ -36,6 +39,45 @@ pub struct LogEntry {
     timestamp: String,
 }
 
+#[derive(Clone, Serialize)]
+pub struct BotHealth {
+    is_running: bool,
+    is_responsive: bool,
+    uptime_seconds: u64,
+    pid: Option<u32>,
+    memory_mb: Option<f64>,
+}
+
+// Internal function to stop bot (used by restart)
+fn stop_bot_internal(state: &BotState) -> Result<String, String> {
+    let mut process_guard = state.process.lock().map_err(|e| e.to_string())?;
+
+    if let Some(mut child) = process_guard.take() {
+        // Try graceful shutdown first (SIGTERM equivalent)
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let _ = Command::new("kill")
+                .args(["-TERM", &child.id().to_string()])
+                .spawn();
+        }
+
+        // Wait a bit for graceful shutdown
+        thread::sleep(Duration::from_millis(500));
+
+        // Force kill if still running
+        let _ = child.kill();
+        let _ = child.wait();
+
+        let mut start_time = state.start_time.lock().map_err(|e| e.to_string())?;
+        *start_time = None;
+
+        Ok("Bot stopped successfully".to_string())
+    } else {
+        Err("Bot is not running".to_string())
+    }
+}
+
 // Commands
 
 #[tauri::command]
@@ -58,15 +100,19 @@ fn get_bot_status(state: State<BotState>) -> BotStatus {
     }
 }
 
-#[tauri::command]
-fn start_bot(state: State<BotState>, project_path: String) -> Result<String, String> {
+// Internal function for starting bot (used by both command and tray menu)
+fn start_bot_internal(
+    app: AppHandle,
+    state: &BotState,
+    project_path: String,
+) -> Result<String, String> {
     let mut process_guard = state.process.lock().map_err(|e| e.to_string())?;
 
     if process_guard.is_some() {
         return Err("Bot is already running".to_string());
     }
 
-    let child = Command::new("pnpm")
+    let mut child = Command::new("pnpm")
         .args(["run", "dev"])
         .current_dir(&project_path)
         .stdout(Stdio::piped())
@@ -75,6 +121,43 @@ fn start_bot(state: State<BotState>, project_path: String) -> Result<String, Str
         .map_err(|e| format!("Failed to start bot: {}", e))?;
 
     let pid = child.id();
+
+    // Capture stdout and stream to frontend
+    if let Some(stdout) = child.stdout.take() {
+        let app_clone = app.clone();
+        thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let log = LogEntry {
+                        level: "info".to_string(),
+                        message: line,
+                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                    };
+                    let _ = app_clone.emit("bot-log", log);
+                }
+            }
+        });
+    }
+
+    // Capture stderr and stream to frontend
+    if let Some(stderr) = child.stderr.take() {
+        let app_clone = app.clone();
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let log = LogEntry {
+                        level: "error".to_string(),
+                        message: line,
+                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
+                    };
+                    let _ = app_clone.emit("bot-log", log);
+                }
+            }
+        });
+    }
+
     *process_guard = Some(child);
 
     let mut start_time = state.start_time.lock().map_err(|e| e.to_string())?;
@@ -84,25 +167,97 @@ fn start_bot(state: State<BotState>, project_path: String) -> Result<String, Str
 }
 
 #[tauri::command]
+fn start_bot(
+    app: AppHandle,
+    state: State<BotState>,
+    project_path: String,
+) -> Result<String, String> {
+    start_bot_internal(app, &state, project_path)
+}
+
+#[tauri::command]
 fn stop_bot(state: State<BotState>) -> Result<String, String> {
-    let mut process_guard = state.process.lock().map_err(|e| e.to_string())?;
+    stop_bot_internal(&state)
+}
 
-    if let Some(mut child) = process_guard.take() {
-        child.kill().map_err(|e| format!("Failed to stop bot: {}", e))?;
+#[tauri::command]
+fn restart_bot(
+    app: AppHandle,
+    state: State<BotState>,
+    project_path: String,
+) -> Result<String, String> {
+    // Stop if running
+    let _ = stop_bot_internal(&state);
 
-        let mut start_time = state.start_time.lock().map_err(|e| e.to_string())?;
-        *start_time = None;
+    // Wait a moment
+    thread::sleep(Duration::from_millis(300));
 
-        Ok("Bot stopped successfully".to_string())
+    // Start again
+    start_bot_internal(app, &state, project_path)
+}
+
+#[tauri::command]
+fn get_bot_health(state: State<BotState>) -> BotHealth {
+    let process = state.process.lock().unwrap();
+    let start_time = state.start_time.lock().unwrap();
+
+    let is_running = process.is_some();
+    let pid = process.as_ref().map(|p| p.id());
+
+    let uptime_seconds = if let Some(start) = *start_time {
+        start.elapsed().as_secs()
     } else {
-        Err("Bot is not running".to_string())
+        0
+    };
+
+    // Get memory usage on macOS/Linux
+    let memory_mb = pid.and_then(|p| {
+        #[cfg(unix)]
+        {
+            let output = Command::new("ps")
+                .args(["-o", "rss=", "-p", &p.to_string()])
+                .output()
+                .ok()?;
+            let rss_kb: f64 = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .parse()
+                .ok()?;
+            Some(rss_kb / 1024.0)
+        }
+        #[cfg(not(unix))]
+        {
+            None
+        }
+    });
+
+    // Check if process is responsive (exists and not zombie)
+    let is_responsive = pid.map_or(false, |p| {
+        #[cfg(unix)]
+        {
+            Command::new("kill")
+                .args(["-0", &p.to_string()])
+                .output()
+                .map_or(false, |o| o.status.success())
+        }
+        #[cfg(not(unix))]
+        {
+            true
+        }
+    });
+
+    BotHealth {
+        is_running,
+        is_responsive,
+        uptime_seconds,
+        pid,
+        memory_mb,
     }
 }
 
 #[tauri::command]
 fn get_project_path() -> String {
-    // Hardcoded path to the chatcode project
-    "/Users/hao/project/chatcode".to_string()
+    // Path to the chatcode project
+    "/Users/wanghao/Project/c2me".to_string()
 }
 
 #[tauri::command]
@@ -162,10 +317,11 @@ pub fn run() {
             // Create tray menu items
             let start_i = MenuItem::with_id(app, "start", "▶️ Start Bot", true, None::<&str>)?;
             let stop_i = MenuItem::with_id(app, "stop", "⏹️ Stop Bot", true, None::<&str>)?;
+            let restart_i = MenuItem::with_id(app, "restart", "🔄 Restart Bot", true, None::<&str>)?;
             let dashboard_i = MenuItem::with_id(app, "dashboard", "📊 Open Dashboard", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "❌ Quit ChatCode", true, None::<&str>)?;
 
-            let menu = Menu::with_items(app, &[&start_i, &stop_i, &dashboard_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&start_i, &stop_i, &restart_i, &dashboard_i, &quit_i])?;
 
             // Create tray icon with icon from resources
             let tray = TrayIconBuilder::new()
@@ -190,14 +346,26 @@ pub fn run() {
                     "start" => {
                         let state: State<BotState> = app.state();
                         let project_path = get_project_path();
-                        match start_bot(state, project_path) {
+                        match start_bot_internal(app.clone(), &state, project_path) {
                             Ok(msg) => { let _ = app.emit("bot-status", msg); }
                             Err(e) => { let _ = app.emit("bot-error", e); }
                         }
                     }
                     "stop" => {
                         let state: State<BotState> = app.state();
-                        match stop_bot(state) {
+                        match stop_bot_internal(&state) {
+                            Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                            Err(e) => { let _ = app.emit("bot-error", e); }
+                        }
+                    }
+                    "restart" => {
+                        let state: State<BotState> = app.state();
+                        let project_path = get_project_path();
+                        // Stop first
+                        let _ = stop_bot_internal(&state);
+                        thread::sleep(Duration::from_millis(300));
+                        // Start again
+                        match start_bot_internal(app.clone(), &state, project_path) {
                             Ok(msg) => { let _ = app.emit("bot-status", msg); }
                             Err(e) => { let _ = app.emit("bot-error", e); }
                         }
@@ -209,12 +377,114 @@ pub fn run() {
             // Store tray reference to prevent it from being dropped
             app.manage(tray);
 
+            // Create native macOS menu bar
+            #[cfg(target_os = "macos")]
+            {
+                // App menu
+                let about = MenuItem::with_id(app, "about", "About ChatCode", true, None::<&str>)?;
+                let settings = MenuItem::with_id(app, "settings", "Settings...", true, Some("CmdOrCtrl+,"))?;
+                let app_menu = SubmenuBuilder::new(app, "ChatCode")
+                    .item(&about)
+                    .separator()
+                    .item(&settings)
+                    .separator()
+                    .hide()
+                    .hide_others()
+                    .show_all()
+                    .separator()
+                    .quit()
+                    .build()?;
+
+                // Bot menu
+                let menu_start = MenuItem::with_id(app, "menu_start", "Start Bot", true, Some("CmdOrCtrl+R"))?;
+                let menu_stop = MenuItem::with_id(app, "menu_stop", "Stop Bot", true, Some("CmdOrCtrl+."))?;
+                let menu_restart = MenuItem::with_id(app, "menu_restart", "Restart Bot", true, Some("CmdOrCtrl+Shift+R"))?;
+                let menu_logs = MenuItem::with_id(app, "menu_logs", "View Logs", true, Some("CmdOrCtrl+L"))?;
+                let bot_menu = SubmenuBuilder::new(app, "Bot")
+                    .item(&menu_start)
+                    .item(&menu_stop)
+                    .item(&menu_restart)
+                    .separator()
+                    .item(&menu_logs)
+                    .build()?;
+
+                // Window menu
+                let window_menu = SubmenuBuilder::new(app, "Window")
+                    .minimize()
+                    .separator()
+                    .close_window()
+                    .build()?;
+
+                // Build and set the menu
+                let native_menu = MenuBuilder::new(app)
+                    .item(&app_menu)
+                    .item(&bot_menu)
+                    .item(&window_menu)
+                    .build()?;
+
+                app.set_menu(native_menu)?;
+
+                // Handle native menu events
+                app.on_menu_event(move |app, event| {
+                    match event.id().as_ref() {
+                        "about" => {
+                            // Show about dialog or window
+                            let _ = app.emit("show-about", ());
+                        }
+                        "settings" => {
+                            // Switch to config tab
+                            let _ = app.emit("show-settings", ());
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        "menu_start" => {
+                            let state: State<BotState> = app.state();
+                            let project_path = get_project_path();
+                            match start_bot_internal(app.clone(), &state, project_path) {
+                                Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                                Err(e) => { let _ = app.emit("bot-error", e); }
+                            }
+                        }
+                        "menu_stop" => {
+                            let state: State<BotState> = app.state();
+                            match stop_bot_internal(&state) {
+                                Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                                Err(e) => { let _ = app.emit("bot-error", e); }
+                            }
+                        }
+                        "menu_restart" => {
+                            let state: State<BotState> = app.state();
+                            let project_path = get_project_path();
+                            let _ = stop_bot_internal(&state);
+                            thread::sleep(Duration::from_millis(300));
+                            match start_bot_internal(app.clone(), &state, project_path) {
+                                Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                                Err(e) => { let _ = app.emit("bot-error", e); }
+                            }
+                        }
+                        "menu_logs" => {
+                            // Switch to logs tab
+                            let _ = app.emit("show-logs", ());
+                            if let Some(window) = app.get_webview_window("main") {
+                                let _ = window.show();
+                                let _ = window.set_focus();
+                            }
+                        }
+                        _ => {}
+                    }
+                });
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             get_bot_status,
             start_bot,
             stop_bot,
+            restart_bot,
+            get_bot_health,
             get_project_path,
             load_config,
             save_config
