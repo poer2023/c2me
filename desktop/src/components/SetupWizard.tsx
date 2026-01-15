@@ -29,6 +29,9 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installProgress, setInstallProgress] = useState<InstallProgress | null>(null);
+  const [showToken, setShowToken] = useState(false);
+  const [claudePathDetected, setClaudePathDetected] = useState(false);
+  const [detectingClaudePath, setDetectingClaudePath] = useState(false);
 
   // Config state
   const [config, setConfig] = useState({
@@ -101,6 +104,21 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
       setError(`Failed to save configuration: ${e}`);
     }
     setLoading(false);
+  };
+
+  const detectClaudePath = async () => {
+    setDetectingClaudePath(true);
+    try {
+      const path = await invoke<string>('detect_claude_code_path');
+      if (path) {
+        setConfig({ ...config, CLAUDE_CODE_PATH: path });
+        setClaudePathDetected(true);
+      }
+    } catch (e) {
+      // Silent fail - user can enter manually
+      console.log('Could not auto-detect Claude path:', e);
+    }
+    setDetectingClaudePath(false);
   };
 
   const completeSetup = async () => {
@@ -256,12 +274,22 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
                 <label>
                   Telegram Bot Token <span className="required">*</span>
                 </label>
-                <input
-                  type="password"
-                  value={config.TG_BOT_TOKEN}
-                  onChange={(e) => setConfig({ ...config, TG_BOT_TOKEN: e.target.value })}
-                  placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-                />
+                <div className="input-with-button">
+                  <input
+                    type={showToken ? 'text' : 'password'}
+                    value={config.TG_BOT_TOKEN}
+                    onChange={(e) => setConfig({ ...config, TG_BOT_TOKEN: e.target.value })}
+                    placeholder="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-small btn-icon"
+                    onClick={() => setShowToken(!showToken)}
+                    title={showToken ? 'Hide token' : 'Show token'}
+                  >
+                    {showToken ? '🙈' : '👁️'}
+                  </button>
+                </div>
                 <p className="form-hint">
                   Get your token from{' '}
                   <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">
@@ -274,14 +302,29 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
                 <label>
                   Claude Code Path <span className="required">*</span>
                 </label>
-                <input
-                  type="text"
-                  value={config.CLAUDE_CODE_PATH}
-                  onChange={(e) => setConfig({ ...config, CLAUDE_CODE_PATH: e.target.value })}
-                  placeholder="/usr/local/bin/claude"
-                />
+                <div className="input-with-button">
+                  <input
+                    type="text"
+                    value={config.CLAUDE_CODE_PATH}
+                    onChange={(e) => {
+                      setConfig({ ...config, CLAUDE_CODE_PATH: e.target.value });
+                      setClaudePathDetected(false);
+                    }}
+                    placeholder="/usr/local/bin/claude"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-small"
+                    onClick={detectClaudePath}
+                    disabled={detectingClaudePath}
+                  >
+                    {detectingClaudePath ? '...' : '🔍 Detect'}
+                  </button>
+                </div>
                 <p className="form-hint">
-                  Path to your Claude Code binary. Run `which claude` to find it.
+                  {claudePathDetected
+                    ? '✅ Claude Code path auto-detected!'
+                    : 'Path to your Claude Code binary. Click Detect or run `which claude` to find it.'}
                 </p>
               </div>
 
@@ -340,6 +383,13 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
                     disabled={loading}
                   >
                     {loading ? 'Installing...' : '📦 Install Dependencies'}
+                  </button>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setStep(4)}
+                    disabled={loading}
+                  >
+                    Skip (I'll install manually)
                   </button>
                 </>
               )}

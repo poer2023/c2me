@@ -47,6 +47,8 @@ function App() {
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [autostart, setAutostart] = useState<boolean>(false);
   const [showWizard, setShowWizard] = useState<boolean | null>(null); // null = loading
+  const [showToken, setShowToken] = useState(false);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   // Log filtering state
   const [logSearch, setLogSearch] = useState<string>('');
@@ -88,6 +90,19 @@ function App() {
       setShowWizard(!complete);
     }).catch(() => setShowWizard(true));
   }, []);
+
+  // Auto-start bot when setup is complete and bot is not running
+  useEffect(() => {
+    if (showWizard === false && projectPath && status && !status.is_running) {
+      // Small delay to ensure everything is initialized
+      const timer = setTimeout(() => {
+        invoke<string>('start_bot', { projectPath }).catch((err) => {
+          console.error('Auto-start bot failed:', err);
+        });
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showWizard, projectPath, status?.is_running]);
 
   // Listen for log events
   useEffect(() => {
@@ -388,12 +403,22 @@ function App() {
         <div className="config-panel">
           <div className="form-group">
             <label>Telegram Bot Token</label>
-            <input
-              type="password"
-              value={config.TG_BOT_TOKEN || ''}
-              onChange={(e) => updateConfig('TG_BOT_TOKEN', e.target.value)}
-              placeholder="Enter your Telegram bot token"
-            />
+            <div className="input-with-button">
+              <input
+                type={showToken ? 'text' : 'password'}
+                value={config.TG_BOT_TOKEN || ''}
+                onChange={(e) => updateConfig('TG_BOT_TOKEN', e.target.value)}
+                placeholder="Enter your Telegram bot token"
+              />
+              <button
+                type="button"
+                className="btn btn-small btn-icon"
+                onClick={() => setShowToken(!showToken)}
+                title={showToken ? 'Hide token' : 'Show token'}
+              >
+                {showToken ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
 
           <div className="form-group">
@@ -404,6 +429,38 @@ function App() {
               onChange={(e) => updateConfig('CLAUDE_CODE_PATH', e.target.value)}
               placeholder="/path/to/claude"
             />
+          </div>
+
+          <div className="form-group">
+            <label>Anthropic API Key</label>
+            <div className="input-with-button">
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={config.ANTHROPIC_API_KEY || ''}
+                onChange={(e) => updateConfig('ANTHROPIC_API_KEY', e.target.value)}
+                placeholder="sk-ant-api03-..."
+              />
+              <button
+                type="button"
+                className="btn btn-small btn-icon"
+                onClick={() => setShowApiKey(!showApiKey)}
+                title={showApiKey ? 'Hide API key' : 'Show API key'}
+              >
+                {showApiKey ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <p className="form-hint">Get your API key from console.anthropic.com</p>
+          </div>
+
+          <div className="form-group">
+            <label>Anthropic Base URL (Optional)</label>
+            <input
+              type="text"
+              value={config.ANTHROPIC_BASE_URL || ''}
+              onChange={(e) => updateConfig('ANTHROPIC_BASE_URL', e.target.value)}
+              placeholder="https://api.anthropic.com (leave empty for default)"
+            />
+            <p className="form-hint">Only set if using a proxy or custom endpoint</p>
           </div>
 
           <div className="form-group">

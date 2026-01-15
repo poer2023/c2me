@@ -132,6 +132,7 @@ fn start_bot_internal(
         return Err("Bot is already running".to_string());
     }
 
+    // Run pnpm directly (PATH is fixed by fix_path_env at startup)
     let mut child = Command::new("pnpm")
         .args(["run", "dev"])
         .current_dir(&project_path)
@@ -427,7 +428,7 @@ pub struct PrerequisiteStatus {
 
 #[tauri::command]
 fn check_prerequisites(project_path: String) -> PrerequisiteStatus {
-    // Check Node.js
+    // Check Node.js (PATH is fixed by fix_path_env at startup)
     let node_result = Command::new("node")
         .arg("--version")
         .output();
@@ -493,7 +494,7 @@ fn install_dependencies(app: AppHandle, project_path: String) -> Result<String, 
         progress: 0,
     });
 
-    // Run pnpm install
+    // Run pnpm install (PATH is fixed by fix_path_env at startup)
     let output = Command::new("pnpm")
         .args(["install", "--frozen-lockfile"])
         .current_dir(&project_path)
@@ -507,7 +508,6 @@ fn install_dependencies(app: AppHandle, project_path: String) -> Result<String, 
     });
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
         // Try without frozen lockfile
         let retry_output = Command::new("pnpm")
             .arg("install")
@@ -550,6 +550,7 @@ fn install_dependencies(app: AppHandle, project_path: String) -> Result<String, 
 
 #[tauri::command]
 fn install_pnpm() -> Result<String, String> {
+    // Run npm install (PATH is fixed by fix_path_env at startup)
     let output = Command::new("npm")
         .args(["install", "-g", "pnpm"])
         .output()
@@ -768,6 +769,10 @@ fn detect_claude_code_path() -> Option<String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Fix PATH environment variable for macOS GUI apps (to find nvm-installed node/pnpm)
+    #[cfg(target_os = "macos")]
+    let _ = fix_path_env::fix();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
@@ -867,6 +872,49 @@ pub fn run() {
             // Store tray reference to prevent it from being dropped
             app.manage(tray);
 
+            // Show window on first launch (setup not complete)
+            let home = std::env::var("HOME").unwrap_or_default();
+            let setup_flag = format!("{}/.chatcode/setup_complete", home);
+            let setup_complete = std::path::Path::new(&setup_flag).exists();
+
+            if !setup_complete {
+                #[cfg(target_os = "macos")]
+                {
+                    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                }
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            } else {
+                // Auto-start bot if setup is complete
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    // Wait a moment for app to fully initialize
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+
+                    let state: State<BotState> = app_handle.state();
+                    let project_path = get_project_path();
+
+                    // Check if bot is already running
+                    let is_running = {
+                        let process = state.process.lock().unwrap();
+                        process.is_some()
+                    };
+
+                    if !is_running {
+                        match start_bot_internal(app_handle.clone(), &state, project_path) {
+                            Ok(_) => {
+                                println!("Bot auto-started successfully");
+                            }
+                            Err(e) => {
+                                eprintln!("Failed to auto-start bot: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+
             // Create native macOS menu bar
             #[cfg(target_os = "macos")]
             {
@@ -898,6 +946,18 @@ pub fn run() {
                     .item(&menu_logs)
                     .build()?;
 
+                // Edit menu (required for Cmd+C, Cmd+V, etc. to work on macOS)
+                let edit_menu = SubmenuBuilder::new(app, "Edit")
+                    .undo()
+                    .redo()
+                    .separator()
+                    .cut()
+                    .copy()
+                    .paste()
+                    .separator()
+                    .select_all()
+                    .build()?;
+
                 // Window menu
                 let window_menu = SubmenuBuilder::new(app, "Window")
                     .minimize()
@@ -908,6 +968,7 @@ pub fn run() {
                 // Build and set the menu
                 let native_menu = MenuBuilder::new(app)
                     .item(&app_menu)
+                    .item(&edit_menu)
                     .item(&bot_menu)
                     .item(&window_menu)
                     .build()?;

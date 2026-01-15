@@ -46,6 +46,7 @@ interface BotMetrics {
 
 interface MetricsPanelProps {
   isRunning: boolean;
+  onStartBot?: () => void;
 }
 
 function formatDuration(ms: number): string {
@@ -67,7 +68,7 @@ function formatUptime(seconds: number): string {
   return `${secs}s`;
 }
 
-export function MetricsPanel({ isRunning }: MetricsPanelProps) {
+export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
   const [metrics, setMetrics] = useState<BotMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,7 +76,7 @@ export function MetricsPanel({ isRunning }: MetricsPanelProps) {
   const fetchMetrics = async () => {
     if (!isRunning) {
       setMetrics(null);
-      setError('Bot is not running');
+      setError(null);
       return;
     }
 
@@ -85,8 +86,10 @@ export function MetricsPanel({ isRunning }: MetricsPanelProps) {
       setMetrics(data);
       setError(null);
     } catch (err) {
-      setError(`${err}`);
-      setMetrics(null);
+      // Silently handle connection errors when bot just started
+      if (!metrics) {
+        setError(null);
+      }
     }
     setLoading(false);
   };
@@ -102,7 +105,12 @@ export function MetricsPanel({ isRunning }: MetricsPanelProps) {
       <div className="metrics-panel">
         <div className="metrics-empty">
           <span className="metrics-empty-icon">📊</span>
-          <p>Start the bot to view metrics</p>
+          <p>Bot is not running</p>
+          {onStartBot && (
+            <button className="btn btn-primary" onClick={onStartBot}>
+              Start Bot
+            </button>
+          )}
         </div>
       </div>
     );

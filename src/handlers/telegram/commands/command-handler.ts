@@ -28,7 +28,12 @@ export class CommandHandler {
   async handleStart(ctx: Context): Promise<void> {
     if (!ctx.chat) return;
 
-    await this.telegramSender.safeSendMessage(ctx.chat.id, MESSAGES.WELCOME_TEXT);
+    const chatId = ctx.chat.id;
+
+    // Create user session if not exists
+    await this.getOrCreateUser(chatId);
+
+    await this.telegramSender.safeSendMessage(chatId, MESSAGES.WELCOME_TEXT);
   }
 
   async handleCreateProject(ctx: Context): Promise<void> {

@@ -1,13 +1,13 @@
 {
   "name": "c2me",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "description": "Telegram bot for Claude Code integration",
   "main": "dist/main.js",
   "scripts": {
     "prebuild": "rimraf dist",
     "build": "tsc",
     "start": "node dist/main.js",
-    "dev": "DEBUG=* tsx src/main.ts",
+    "dev": "tsx src/main.ts",
     "watch": "tsc --watch",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",

@@ -1168,6 +1168,7 @@ body {
   justify-content: center;
   z-index: 1000;
   padding: var(--space-lg);
+  overflow: hidden;
 }
 
 .wizard-container {
@@ -1178,7 +1179,7 @@ body {
   box-shadow: var(--glass-shadow), var(--glass-inner-glow);
   width: 100%;
   max-width: 600px;
-  max-height: 85vh;
+  max-height: calc(100vh - 48px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1399,4 +1400,65 @@ body {
 .btn-small {
   padding: var(--space-xs) var(--space-sm) !important;
   font-size: 12px !important;
+}
+
+/* Input with toggle (password visibility) */
+.input-with-toggle {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-toggle input {
+  flex: 1;
+  padding-right: 40px;
+}
+
+.btn-toggle-visibility {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px;
+  opacity: 0.6;
+  transition: opacity var(--transition-fast);
+}
+
+.btn-toggle-visibility:hover {
+  opacity: 1;
+}
+
+/* Auto-detected indicator */
+.auto-detected {
+  font-size: 11px;
+  color: var(--system-green);
+  margin-left: var(--space-sm);
+  font-weight: 500;
+}
+
+/* Auto-skip hint animation */
+.auto-skip-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-top: var(--space-xs);
+  animation: fadeInOut 1.5s ease-in-out infinite;
+}
+
+@keyframes fadeInOut {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* Install complete styling */
+.install-complete {
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.install-complete .install-icon {
+  font-size: 48px;
+  display: block;
+  margin-bottom: var(--space-md);
 }
