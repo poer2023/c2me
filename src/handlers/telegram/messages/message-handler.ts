@@ -14,6 +14,7 @@ import { incrementCounter, startTiming } from '../../../utils/metrics';
 import { downloadTelegramImage, buildMessageContent, ImageContent } from '../../../utils/image-handler';
 import * as fs from 'fs';
 import * as path from 'path';
+import { exec } from 'child_process';
 
 export class MessageHandler {
   private telegramSender: TelegramSender;
@@ -50,6 +51,13 @@ export class MessageHandler {
     const user = await this.storage.getUserSession(chatId);
     if (!user) {
       await this.sendHelp(ctx);
+      return;
+    }
+
+    // Handle !command syntax for quick bash execution
+    if (text.startsWith('!') && text.length > 1) {
+      await this.handleBashCommand(ctx, user, text.substring(1));
+      stopTimer();
       return;
     }
 
@@ -419,6 +427,102 @@ export class MessageHandler {
       await this.progressManager.completeProgress(user.chatId, false);
       await ctx.reply(`Failed to start session: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Handle !command syntax for quick bash execution
+   * Executes the command in the project directory and returns output
+   */
+  private async handleBashCommand(ctx: Context, user: UserSessionModel, command: string): Promise<void> {
+    if (!ctx.chat) return;
+
+    // Security: Only allow in active session with a project path
+    if (user.state !== UserState.InSession || !user.projectPath) {
+      await ctx.reply('⚠️ You must be in an active session to run bash commands.\n\nStart a session first by sending a message or creating a project.');
+      return;
+    }
+
+    // Security: Block dangerous commands
+    const dangerousPatterns = [
+      /rm\s+-rf\s+[\/~]/i,
+      /rm\s+-r\s+[\/~]/i,
+      />\s*\/dev\/sd/i,
+      /mkfs/i,
+      /dd\s+if=/i,
+      /:[()\{\}];:/,
+      /chmod\s+-R\s+777\s+\//i,
+      /wget.*\|\s*sh/i,
+      /curl.*\|\s*sh/i,
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(command)) {
+        await ctx.reply('🚫 This command is blocked for security reasons.');
+        return;
+      }
+    }
+
+    try {
+      const processingMsg = await ctx.reply(`⚙️ Executing: \`${command}\`...`);
+
+      // Execute command with timeout
+      const result = await this.executeCommand(command, user.projectPath, 30000);
+
+      // Delete processing message
+      try {
+        await ctx.deleteMessage(processingMsg.message_id);
+      } catch {
+        // Ignore delete errors
+      }
+
+      // Format and send output
+      const output = result.stdout || result.stderr || '(no output)';
+      const truncatedOutput = output.length > 4000
+        ? output.substring(0, 4000) + '\n... (output truncated)'
+        : output;
+
+      const statusIcon = result.exitCode === 0 ? '✅' : '❌';
+      const response = `${statusIcon} \`${command}\`\n\n\`\`\`\n${truncatedOutput}\n\`\`\``;
+
+      await this.telegramSender.safeSendMessage(ctx.chat.id, response);
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      await ctx.reply(`❌ Command failed: ${errorMsg}`);
+    }
+  }
+
+  /**
+   * Execute a bash command with timeout
+   */
+  private executeCommand(command: string, cwd: string, timeout: number): Promise<{
+    stdout: string;
+    stderr: string;
+    exitCode: number;
+  }> {
+    return new Promise((resolve, reject) => {
+      const child = exec(command, {
+        cwd,
+        timeout,
+        maxBuffer: 1024 * 1024, // 1MB buffer
+        shell: '/bin/bash',
+      }, (error, stdout, stderr) => {
+        if (error && error.killed) {
+          reject(new Error('Command timed out'));
+          return;
+        }
+        resolve({
+          stdout: stdout.toString(),
+          stderr: stderr.toString(),
+          exitCode: error ? error.code || 1 : 0,
+        });
+      });
+
+      // Handle process errors
+      child.on('error', (err) => {
+        reject(err);
+      });
+    });
   }
 
 }

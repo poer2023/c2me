@@ -179,6 +179,7 @@ Claude 会话：${hasClaudeSession}
 /ls [路径] - 浏览项目文件和目录
 发送文件 - 直接发送 .txt/.py/.ts 等文件
 @文件路径 - 在消息中引用文件内容（如 @src/main.ts）
+!命令 - 快速执行 bash 命令（如 !git status）
 
 ℹ️ **信息**
 /status - 查看完整状态信息
