@@ -731,23 +731,25 @@ fn extract_bot_bundle(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 fn detect_claude_code_path() -> Option<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+
     // Try common locations for Claude Code binary
-    let paths_to_check = vec![
+    let paths_to_check: Vec<String> = vec![
         // Homebrew on Apple Silicon
-        "/opt/homebrew/bin/claude",
+        "/opt/homebrew/bin/claude".to_string(),
         // Homebrew on Intel
-        "/usr/local/bin/claude",
+        "/usr/local/bin/claude".to_string(),
         // npm global
-        "/usr/local/bin/claude-code",
+        "/usr/local/bin/claude-code".to_string(),
         // User local bin
-        &format!("{}/.local/bin/claude", std::env::var("HOME").unwrap_or_default()),
+        format!("{}/.local/bin/claude", home),
         // Cargo bin
-        &format!("{}/.cargo/bin/claude", std::env::var("HOME").unwrap_or_default()),
+        format!("{}/.cargo/bin/claude", home),
     ];
 
     for path in paths_to_check {
-        if std::path::Path::new(path).exists() {
-            return Some(path.to_string());
+        if std::path::Path::new(&path).exists() {
+            return Some(path);
         }
     }
 
