@@ -2,16 +2,19 @@ import express, { Request, Response, NextFunction } from 'express';
 import { Telegraf } from 'telegraf';
 import { WebhookConfig } from '../config/config';
 import { getMetricsSnapshot, MetricsSnapshot } from '../utils/metrics';
+import { IStorage } from '../storage/interface';
 
 export class ExpressServer {
   private app: express.Application;
   private bot: Telegraf;
   private port: number;
+  private storage: IStorage | undefined;
 
-  constructor(bot: Telegraf, port: number) {
+  constructor(bot: Telegraf, port: number, storage?: IStorage) {
     this.app = express();
     this.bot = bot;
     this.port = port;
+    this.storage = storage;
     this.setupMiddleware();
   }
 
@@ -45,6 +48,21 @@ export class ExpressServer {
         res.json(metrics);
       } catch (error) {
         res.status(500).json({ error: 'Failed to get metrics' });
+      }
+    });
+
+    // Analytics endpoint for user statistics (Phase 2)
+    this.app.get('/analytics', async (_req: Request, res: Response) => {
+      try {
+        if (!this.storage) {
+          res.status(503).json({ error: 'Storage not available' });
+          return;
+        }
+        const analytics = await this.storage.getAnalyticsSnapshot();
+        res.json(analytics);
+      } catch (error) {
+        console.error('Failed to get analytics:', error);
+        res.status(500).json({ error: 'Failed to get analytics' });
       }
     });
 

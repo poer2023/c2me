@@ -118,34 +118,71 @@ export class TelegramHandler {
 
 
   private setupHandlers(): void {
-    // Command handlers
-    this.bot.start((ctx) => this.commandHandler.handleStart(ctx));
-    this.bot.command('createproject', (ctx) => this.commandHandler.handleCreateProject(ctx));
-    this.bot.command('listproject', (ctx) => this.commandHandler.handleListProject(ctx));
-    this.bot.command('exitproject', (ctx) => this.commandHandler.handleExitProject(ctx));
+    // Command handlers with activity tracking
+    this.bot.start((ctx) => this.withTracking(ctx, 'start', () => this.commandHandler.handleStart(ctx)));
+    this.bot.command('createproject', (ctx) => this.withTracking(ctx, 'createproject', () => this.commandHandler.handleCreateProject(ctx)));
+    this.bot.command('listproject', (ctx) => this.withTracking(ctx, 'listproject', () => this.commandHandler.handleListProject(ctx)));
+    this.bot.command('exitproject', (ctx) => this.withTracking(ctx, 'exitproject', () => this.commandHandler.handleExitProject(ctx)));
 
-    this.bot.command('help', (ctx) => this.commandHandler.handleHelp(ctx));
-    this.bot.command('status', (ctx) => this.commandHandler.handleStatus(ctx));
-    this.bot.command('ls', (ctx) => this.fileBrowserHandler.handleLsCommand(ctx));
-    this.bot.command('auth', (ctx) => this.commandHandler.handleAuth(ctx));
+    this.bot.command('help', (ctx) => this.withTracking(ctx, 'help', () => this.commandHandler.handleHelp(ctx)));
+    this.bot.command('status', (ctx) => this.withTracking(ctx, 'status', () => this.commandHandler.handleStatus(ctx)));
+    this.bot.command('ls', (ctx) => this.withTracking(ctx, 'ls', () => this.fileBrowserHandler.handleLsCommand(ctx)));
+    this.bot.command('auth', (ctx) => this.withTracking(ctx, 'auth', () => this.commandHandler.handleAuth(ctx)));
 
-    this.bot.command('abort', (ctx) => this.commandHandler.handleAbort(ctx));
-    this.bot.command('clear', (ctx) => this.commandHandler.handleClear(ctx));
+    this.bot.command('abort', (ctx) => this.withTracking(ctx, 'abort', () => this.commandHandler.handleAbort(ctx)));
+    this.bot.command('clear', (ctx) => this.withTracking(ctx, 'clear', () => this.commandHandler.handleClear(ctx)));
 
     // Permission mode commands
-    this.bot.command('default', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Default));
-    this.bot.command('acceptedits', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.AcceptEdits));
-    this.bot.command('plan', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Plan));
-    this.bot.command('bypass', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.BypassPermissions));
+    this.bot.command('default', (ctx) => this.withTracking(ctx, 'default', () => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Default)));
+    this.bot.command('acceptedits', (ctx) => this.withTracking(ctx, 'acceptedits', () => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.AcceptEdits)));
+    this.bot.command('plan', (ctx) => this.withTracking(ctx, 'plan', () => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Plan)));
+    this.bot.command('bypass', (ctx) => this.withTracking(ctx, 'bypass', () => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.BypassPermissions)));
 
     // Progress control commands
-    this.bot.command('progress', (ctx) => this.progressControlHandler.handleProgressCommand(ctx));
-    this.bot.command('progressstats', (ctx) => this.progressControlHandler.handleProgressStatsCommand(ctx));
+    this.bot.command('progress', (ctx) => this.withTracking(ctx, 'progress', () => this.progressControlHandler.handleProgressCommand(ctx)));
+    this.bot.command('progressstats', (ctx) => this.withTracking(ctx, 'progressstats', () => this.progressControlHandler.handleProgressStatsCommand(ctx)));
 
-    // Text message handler
-    this.bot.on(message('text'), (ctx) => this.messageHandler.handleTextMessage(ctx));
+    // Text message handler with activity tracking
+    this.bot.on(message('text'), (ctx) => this.withTracking(ctx, undefined, () => this.messageHandler.handleTextMessage(ctx)));
 
     this.bot.on('callback_query', (ctx) => this.callbackHandler.handleCallback(ctx));
+  }
+
+  /**
+   * Wrap handler with user activity tracking
+   */
+  private async withTracking(ctx: any, command?: string, handler?: () => Promise<void>): Promise<void> {
+    // Track user activity
+    if (ctx.chat && ctx.from) {
+      try {
+        const update: {
+          chatId: number;
+          username?: string;
+          firstName?: string;
+          lastName?: string;
+          command?: string;
+          timestamp: Date;
+        } = {
+          chatId: ctx.chat.id,
+          timestamp: new Date(),
+        };
+
+        if (ctx.from.username) update.username = ctx.from.username;
+        if (ctx.from.first_name) update.firstName = ctx.from.first_name;
+        if (ctx.from.last_name) update.lastName = ctx.from.last_name;
+        if (command) update.command = command;
+
+        await this.storage.trackUserActivity(update);
+      } catch (error) {
+        // Don't fail the request if tracking fails
+        console.error('Failed to track user activity:', error);
+      }
+    }
+
+    // Execute the actual handler
+    if (handler) {
+      await handler();
+    }
   }
 
   public async handleClaudeMessage(chatId: number, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {

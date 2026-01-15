@@ -360,6 +360,43 @@ pub struct BotMetrics {
     timestamp: String,
 }
 
+#[derive(Clone, Serialize)]
+pub struct AnalyticsSnapshot {
+    dau: i64,
+    wau: i64,
+    mau: i64,
+    total_users: i64,
+    total_messages: i64,
+    total_sessions: i64,
+    top_commands: serde_json::Value,
+    recent_users: serde_json::Value,
+    generated_at: String,
+}
+
+#[tauri::command]
+fn fetch_analytics() -> Result<serde_json::Value, String> {
+    // Fetch analytics from the bot's HTTP endpoint
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get("http://localhost:3002/analytics")
+        .send()
+        .map_err(|e| format!("Failed to fetch analytics: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Analytics endpoint returned status: {}", response.status()));
+    }
+
+    let analytics: serde_json::Value = response
+        .json()
+        .map_err(|e| format!("Failed to parse analytics JSON: {}", e))?;
+
+    Ok(analytics)
+}
+
 #[tauri::command]
 fn fetch_metrics() -> Result<BotMetrics, String> {
     // Fetch metrics from the bot's HTTP endpoint
@@ -646,7 +683,8 @@ pub fn run() {
             save_config,
             get_autostart_enabled,
             set_autostart_enabled,
-            fetch_metrics
+            fetch_metrics,
+            fetch_analytics
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

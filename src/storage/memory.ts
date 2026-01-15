@@ -1,6 +1,15 @@
 import { UserSessionModel } from '../models/user-session';
 import { Project } from '../models/project';
 import { IStorage } from './interface';
+import {
+  UserActivity,
+  UserActivityUpdate,
+  AnalyticsSnapshot,
+  UserActivitySummary,
+  createEmptyUserActivity,
+  getDateKey,
+  isActiveInLastNDays,
+} from '../models/analytics';
 
 export class MemoryStorage implements IStorage {
   private userSessions: Map<number, UserSessionModel> = new Map();
@@ -12,6 +21,9 @@ export class MemoryStorage implements IStorage {
     chatId: string;
     createdAt: number;
   }> = new Map();
+
+  // User analytics storage
+  private userActivities: Map<number, UserActivity> = new Map();
 
   async initialize(): Promise<void> {
     console.log('Memory storage initialized');
@@ -132,5 +144,97 @@ export class MemoryStorage implements IStorage {
       project.lastAccessed = new Date();
       await this.saveProject(project);
     }
+  }
+
+  // User analytics methods (Phase 2)
+  async trackUserActivity(update: UserActivityUpdate): Promise<void> {
+    const { chatId, username, firstName, lastName, command, timestamp } = update;
+    const now = timestamp || new Date();
+    const dateKey = getDateKey(now);
+
+    let activity = this.userActivities.get(chatId);
+    if (!activity) {
+      activity = createEmptyUserActivity(chatId);
+      this.userActivities.set(chatId, activity);
+    }
+
+    // Update user info
+    if (username) activity.username = username;
+    if (firstName) activity.firstName = firstName;
+    if (lastName) activity.lastName = lastName;
+
+    // Update activity
+    activity.lastSeen = now;
+    activity.messageCount++;
+
+    // Update daily activity
+    activity.dailyActivity[dateKey] = (activity.dailyActivity[dateKey] || 0) + 1;
+
+    // Update command usage
+    if (command) {
+      activity.commandUsage[command] = (activity.commandUsage[command] || 0) + 1;
+    }
+  }
+
+  async getUserActivity(chatId: number): Promise<UserActivity | null> {
+    return this.userActivities.get(chatId) || null;
+  }
+
+  async getAllUserActivities(): Promise<UserActivity[]> {
+    return Array.from(this.userActivities.values())
+      .sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime());
+  }
+
+  async getAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
+    const activities = Array.from(this.userActivities.values());
+    const now = new Date();
+
+    // Calculate DAU/WAU/MAU
+    const dau = activities.filter(a => isActiveInLastNDays(a.lastSeen, 1)).length;
+    const wau = activities.filter(a => isActiveInLastNDays(a.lastSeen, 7)).length;
+    const mau = activities.filter(a => isActiveInLastNDays(a.lastSeen, 30)).length;
+
+    // Calculate totals
+    const totalUsers = activities.length;
+    const totalMessages = activities.reduce((sum, a) => sum + a.messageCount, 0);
+    const totalSessions = activities.reduce((sum, a) => sum + a.sessionCount, 0);
+
+    // Calculate top commands
+    const commandCounts: Record<string, number> = {};
+    for (const activity of activities) {
+      for (const [cmd, count] of Object.entries(activity.commandUsage)) {
+        commandCounts[cmd] = (commandCounts[cmd] || 0) + count;
+      }
+    }
+    const topCommands = Object.entries(commandCounts)
+      .map(([command, count]) => ({ command, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Get recent users
+    const recentUsers: UserActivitySummary[] = activities
+      .slice(0, 50)
+      .map(a => ({
+        chatId: a.chatId,
+        username: a.username,
+        firstName: a.firstName,
+        lastName: a.lastName,
+        lastSeen: a.lastSeen,
+        messageCount: a.messageCount,
+        sessionCount: a.sessionCount,
+        isActive: isActiveInLastNDays(a.lastSeen, 1),
+      }));
+
+    return {
+      dau,
+      wau,
+      mau,
+      totalUsers,
+      totalMessages,
+      totalSessions,
+      topCommands,
+      recentUsers,
+      generatedAt: now,
+    };
   }
 }

@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LiquidGlassFilters } from './components/LiquidGlassFilters';
 import { MetricsPanel } from './components/MetricsPanel';
+import { UsersPanel } from './components/UsersPanel';
 import './App.css';
 
 interface BotStatus {
@@ -38,7 +39,7 @@ function App() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
   const [config, setConfig] = useState<Config | null>(null);
-  const [activeTab, setActiveTab] = useState<'status' | 'logs' | 'metrics' | 'config'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'logs' | 'metrics' | 'users' | 'config'>('status');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -230,6 +231,12 @@ function App() {
             Metrics
           </button>
           <button
+            className={`tab ${activeTab === 'users' ? 'active' : ''}`}
+            onClick={() => setActiveTab('users')}
+          >
+            Users
+          </button>
+          <button
             className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
             onClick={() => setActiveTab('logs')}
           >
@@ -291,6 +298,10 @@ function App() {
 
       {activeTab === 'metrics' && (
         <MetricsPanel isRunning={status?.is_running || false} />
+      )}
+
+      {activeTab === 'users' && (
+        <UsersPanel isRunning={status?.is_running || false} />
       )}
 
       {activeTab === 'logs' && (
