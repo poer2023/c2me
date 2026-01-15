@@ -676,7 +676,7 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&start_i, &stop_i, &restart_i, &dashboard_i, &quit_i])?;
 
             // Create tray icon with icon from resources
-            let tray = TrayIconBuilder::with_id(app, "main")
+            let tray = TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(true)
