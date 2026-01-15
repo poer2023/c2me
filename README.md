@@ -1,365 +1,358 @@
-# Telegram Claude Code Bot
+# C2ME - Claude Code Mobile Edition
 
-[🇨🇳 中文文档](README-zh.md)
+<p align="center">
+  <img src="https://img.shields.io/badge/TypeScript-5.8-blue?logo=typescript" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Node.js-18+-green?logo=node.js" alt="Node.js">
+  <img src="https://img.shields.io/badge/Tauri-2.0-orange?logo=tauri" alt="Tauri">
+  <img src="https://img.shields.io/badge/License-MIT-yellow" alt="License">
+  <img src="https://img.shields.io/badge/Tests-89%20passing-brightgreen" alt="Tests">
+</p>
 
-<a href="https://www.producthunt.com/products/chatcode?embed=true&utm_source=badge-featured&utm_medium=badge&utm_source=badge-chatcode" target="_blank"><img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1001019&theme=light&t=1754407798193" alt="ChatCode - A vibe coding telegram bot. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" /></a>
+<p align="center">
+  <b>将 Claude Code 的强大能力带到 Telegram，随时随地进行 AI 辅助编程</b>
+</p>
 
-## Demo Video
+<p align="center">
+  <a href="#-功能特性">功能特性</a> •
+  <a href="#-快速开始">快速开始</a> •
+  <a href="#-桌面应用">桌面应用</a> •
+  <a href="#-架构设计">架构设计</a> •
+  <a href="#-开发指南">开发指南</a>
+</p>
 
-[![Demo Video](https://img.youtube.com/vi/rhsV6_z9G9c/0.jpg)](https://www.youtube.com/watch?v=rhsV6_z9G9c)
+---
 
-A powerful Telegram bot that integrates with Claude Code to provide AI-powered coding assistance directly through Telegram. **Uses telegram polling mode - runs on any computer with internet connection, no public IP or domain required.**
+## 🎯 项目简介
 
-This bot allows users to interact with Claude's coding capabilities in a conversational interface with features like project management, file browsing, and comprehensive permission controls.
+C2ME (Claude Code Mobile Edition) 是一个将 [Claude Code SDK](https://docs.anthropic.com/en/docs/claude-code) 与 Telegram 深度集成的项目，让你可以通过手机随时随地使用 Claude 的 AI 编程能力。
 
-## Features
+### 为什么选择 C2ME？
 
-- **Claude Code Integration**: Direct integration with Anthropic's Claude Code SDK
-- **Project Management**: Create, list, and manage coding projects
-- **File Browser**: Navigate and explore project directories through Telegram
-- **Permission System**: Multiple permission modes for secure interaction
-- **Session Management**: Persistent user sessions with Redis or memory storage
-- **Tool Handling**: Advanced tool use detection and management
-- **Message Batching**: Efficient message processing and delivery
-- **Permission Control**: Advanced permission system for secure tool usage
-- **Cloudflare Workers**: Optional Workers integration for diff and file view
+| 传统方式 | C2ME |
+|---------|------|
+| 需要电脑才能使用 Claude Code | 📱 手机上随时编程 |
+| 复杂的终端界面 | 💬 自然的对话交互 |
+| 无法远程管理项目 | 🌍 随时随地访问 |
+| 单一本地使用 | 🖥️ 支持桌面应用管理 |
 
-## Mobile-Optimized Experience for Telegram
+## ✨ 功能特性
 
-This bot is specifically designed and optimized for Telegram usage scenarios, providing an excellent mobile experience through several key innovations:
+### 🤖 核心功能
 
-### 1. **Natural Permission Control**
-Provides natural permission control workflow through an integrated permission system. Users can easily approve or deny tool operations through intuitive inline keyboards, making permission management seamless on mobile devices.
+- **Claude Code 集成** - 完整集成 Anthropic Claude Code SDK
+- **项目管理** - 创建、切换、管理多个编程项目
+- **文件浏览器** - 通过 Telegram 内联键盘浏览目录结构
+- **权限控制** - 多种权限模式，安全管理工具调用
+- **会话持久化** - Redis/Memory 双存储后端
+- **实时进度追踪** - 显示 Claude 当前操作状态
 
-### 2. **Visual Diff Display for Edits**
-All code editing operations display comprehensive diff views, allowing users to review changes before approval. This visual feedback is essential for mobile users who need clear context about what changes are being made to their code.
+### 📱 移动优化
 
-### 3. **Integrated File Browser**
-Features a built-in file browser with keyboard navigation that makes it easy to explore project directories directly within Telegram. Users can navigate folder structures, view files, and understand project context without leaving the chat interface.
+- **可视化 Diff** - 代码变更前显示完整差异对比
+- **一键审批** - 通过内联键盘快速批准/拒绝操作
+- **消息批处理** - 智能合并消息，优化移动端阅读
+- **速率限制保护** - 自动处理 Telegram API 限制
 
-### 4. **Essential Operation Support**
-Supports commonly needed operations optimized for chat interface:
-- `/clear` - Clear current session and start fresh
-- `/abort` (ESC equivalent) - Abort current Claude query
-- `/plan` - Enter planning mode for code design discussions
-- Quick permission mode switches (`/default`, `/acceptedits`, `/bypass`)
+### 🖥️ 桌面应用 (Tauri)
 
-### 5. **Tool Interaction Adaptation**
-All Claude Code tools are adapted for Telegram's message-based interface:
-- **Streamlined Information Display**: Complex tool outputs are formatted for mobile readability
-- **Interactive Confirmations**: File operations, code changes, and tool executions use inline keyboards for one-tap approval
+- **系统托盘** - 后台运行，随时控制
+- **原生菜单栏** - macOS 原生体验，快捷键支持
+- **Bot 进程管理** - 启动/停止/重启 Bot
+- **实时日志流** - 查看 Bot 运行日志
+- **配置管理** - 图形化配置 .env 文件
 
-These optimizations ensure that users can effectively manage coding projects, review changes, and interact with AI assistance comfortably from their mobile devices through Telegram.
+## 🚀 快速开始
 
-## Installation & Deployment
+### 环境要求
 
-### Easy Setup - No Server Required
+- Node.js 18+
+- pnpm (推荐) / npm / yarn
+- Redis (可选，用于持久化存储)
+- [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code)
 
-This bot uses **Telegram polling mode**, which means:
-- ✅ No public IP address needed
-- ✅ No domain name required  
-- ✅ No port forwarding or firewall configuration
-- ✅ Works behind NAT/firewall
-- ✅ Can run on any computer with internet access
-- ✅ Perfect for personal development machines or private servers
+### 安装步骤
 
-### Prerequisites
-
-- Node.js 18+ 
-- Package manager: pnpm (recommended), npm, or yarn
-- Redis (optional, for persistent storage)
-- Claude Code CLI tool
-
-### Quick Start
-
-1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd chatcode
-```
+# 1. 克隆项目
+git clone https://github.com/poer2023/c2me.git
+cd c2me
 
-2. Install dependencies:
-```bash
-# Using pnpm (recommended)
+# 2. 安装依赖
 pnpm install
 
-# Or using npm/yarn
-npm install  # yarn install
-```
+# 3. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件
 
-3. Create a Telegram bot and get your token:
-   - Open Telegram and search for `@BotFather`
-   - Send `/newbot` command to BotFather
-   - Follow the instructions to choose a name and username for your bot
-   - Copy the bot token provided by BotFather
-   - Add the token to your `.env` file (see Configuration section below)
-
-4. Configure environment variables (see Configuration section below)
-
-5. Build and start:
-```bash
-# Development mode
+# 4. 启动 Bot
 pnpm run dev
-
-# Production mode
-pnpm run build && pnpm start
 ```
 
-Simply configure your environment variables and run - the bot will poll Telegram's servers directly.
-
-### Cloudflare Workers (Optional)
-
-**When `WORKERS_ENABLED=true`, you need to deploy Cloudflare Workers and configure environment variables:**
-
-#### 1. Local Environment Setup
-In your `.env` file in the project root:
-```env
-WORKERS_ENABLED=true
-WORKERS_ENDPOINT=your_workers_endpoint
-WORKERS_API_KEY=your_secure_api_key_here
-```
-
-#### 2. Create KV Bindings and Deploy Workers
-**Before deploying, you need to create KV namespaces in Cloudflare dashboard:**
-1. Go to Cloudflare Dashboard > Workers & Pages > KV
-2. Create a new KV namespace (name:"CHATCODE")
-3. Copy the KV namespace ID and update `wrangler.toml` with the correct binding ID
-
-```bash
-cd workers
-pnpm install
-wrangler deploy
-```
-
-#### 3. Configure Workers Environment Variables
-In the Cloudflare Workers dashboard, set the following environment variable:
-- **Variable Name**: `API_KEY`
-- **Value**: `{WORKERS_API_KEY}` (same value as in your local `.env` file)
-
-#### 4. Workers Features
-The Workers service provides:
-- Diff content viewing service (`/api/diff`)
-- File viewing service (`/api/file`)
-- HTML rendering interface (`/diff`, `/file`)
-
-## Configuration
-
-Create a `.env` file with the following environment variables:
-
-### Required Configuration
+### 环境变量配置
 
 ```env
-TG_BOT_TOKEN=your_telegram_bot_token  # Get this from @BotFather on Telegram
-BOT_MODE=polling  # Uses polling mode - no public IP or domain needed
-CLAUDE_CODE_PATH=claude
-WORK_DIR=/tmp/tg-claudecode  # Directory where GitHub projects will be cloned here
-```
+# 必需配置
+TG_BOT_TOKEN=your_telegram_bot_token    # 从 @BotFather 获取
+CLAUDE_CODE_PATH=claude                  # Claude Code CLI 路径
+WORK_DIR=/path/to/projects               # 项目工作目录
 
-### Optional Configuration
+# 可选配置
+STORAGE_TYPE=memory                      # memory 或 redis
+REDIS_URL=redis://localhost:6379         # Redis 连接地址
+LOG_LEVEL=info                           # 日志级别
 
-```env
-# Storage
-STORAGE_TYPE=redis  # or 'memory'
-REDIS_URL=redis://localhost:6379
-SESSION_TIMEOUT=7d
-
-# Security
+# 认证配置 (可选)
 SECURITY_SECRET_REQUIRED=false
-SECURITY_SECRET_TOKEN=your_secret_token
+SECURITY_SECRET_TOKEN=your_secret
 
-# Workers (optional)
+# Cloudflare Workers (可选)
 WORKERS_ENABLED=false
-WORKERS_ENDPOINT=your_workers_endpoint
-WORKERS_API_KEY=your_workers_api_key
+WORKERS_ENDPOINT=your_endpoint
+WORKERS_API_KEY=your_key
 ```
 
-## Authentication Configuration
+### 创建 Telegram Bot
 
-By default, anyone who finds your bot can use it. To protect your Claude Code access, you can enable authentication.
+1. 打开 Telegram，搜索 `@BotFather`
+2. 发送 `/newbot` 命令
+3. 按提示设置 Bot 名称和用户名
+4. 复制获得的 Token 到 `.env` 文件
 
-### Enable Authentication
+## 🖥️ 桌面应用
 
-Add these environment variables to your `.env`:
+C2ME 提供基于 Tauri 的原生桌面应用，用于管理 Bot 运行状态。
 
-```env
-SECURITY_SECRET_REQUIRED=true
-SECURITY_SECRET_TOKEN=your_secret_password_here
-```
+### 功能
 
-### Usage
+| 功能 | 快捷键 | 说明 |
+|------|--------|------|
+| 启动 Bot | `⌘R` | 启动 Telegram Bot |
+| 停止 Bot | `⌘.` | 停止运行中的 Bot |
+| 重启 Bot | `⌘⇧R` | 重启 Bot |
+| 查看日志 | `⌘L` | 切换到日志面板 |
+| 设置 | `⌘,` | 打开配置面板 |
 
-When authentication is enabled:
-1. New users must send the secret token to the bot before they can use it
-2. Use `/auth` command to check authentication status. send `/auth token`
-3. Authenticated users stay logged in until the session expires
+### 构建桌面应用
 
-Generate a secure token:
 ```bash
-openssl rand -hex 16
+cd desktop
+
+# 安装依赖
+pnpm install
+
+# 开发模式
+pnpm tauri dev
+
+# 生产构建
+pnpm tauri build
 ```
 
-## Usage
+## 📖 使用指南
 
-### Bot Commands
+### Bot 命令
 
-- `/start` - Initialize the bot and create user session
-- `/createproject` - Create a new coding project
-- `/listproject` - List all available projects
-- `/exitproject` - Exit current project
-- `/help` - Show help information
-- `/status` - Show current session status
-- `/ls` - Browse current directory
-- `/auth` - Authentication management
-- `/abort` - Abort current Claude query
-- `/clear` - Clear current session
+| 命令 | 说明 |
+|------|------|
+| `/start` | 初始化 Bot |
+| `/createproject` | 创建新项目 |
+| `/listproject` | 列出所有项目 |
+| `/exitproject` | 退出当前项目 |
+| `/ls` | 浏览当前目录 |
+| `/status` | 查看会话状态 |
+| `/progress` | 进度追踪设置 |
+| `/clear` | 清除当前会话 |
+| `/abort` | 中止当前查询 |
+| `/help` | 显示帮助信息 |
 
-### Permission Modes
+### 权限模式
 
-- `/default` - Default permission mode
-- `/acceptedits` - Accept all edit operations
-- `/plan` - Planning mode (read-only)
-- `/bypass` - Bypass all permission checks
+| 命令 | 模式 | 说明 |
+|------|------|------|
+| `/default` | 默认模式 | 每个工具调用需要审批 |
+| `/acceptedits` | 自动接受编辑 | 自动批准文件编辑 |
+| `/plan` | 规划模式 | 只读模式，用于代码设计 |
+| `/bypass` | 绕过模式 | 跳过所有权限检查 |
 
-### Interaction
+### 使用示例
 
-Simply send text messages to the bot to interact with Claude Code. The bot will:
+```
+用户: 帮我创建一个 Express 服务器
 
-1. Process your message through Claude Code
-2. Handle any tool uses or file operations
-3. Return formatted responses with syntax highlighting
-4. Manage project context and file browsing
+Claude: 我来帮你创建一个基础的 Express 服务器...
 
-## Architecture
+[📝 编辑文件] server.js
++const express = require('express');
++const app = express();
++...
 
-The bot is built with a modular architecture consisting of:
+[✅ 批准] [❌ 拒绝]
+```
 
-- **Main Application** (`src/main.ts`): Entry point and orchestration
-- **Claude Manager** (`src/handlers/claude.ts`): Claude Code SDK integration
-- **Telegram Handler** (`src/handlers/telegram.ts`): Telegram bot logic coordination
-- **Storage Layer**: Redis or memory-based session storage
-- **Permission System**: Integrated permission control for tool usage
-- **Workers Support**: Optional Cloudflare Workers integration
+## 🏗️ 架构设计
 
-### Message Flow Architecture
+### 系统架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Telegram Client                          │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     TelegramHandler                          │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐    │
+│  │ Command  │ │ Message  │ │ Callback │ │ FileBrowser  │    │
+│  │ Handler  │ │ Handler  │ │ Handler  │ │   Handler    │    │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                      ClaudeManager                           │
+│  ┌──────────────────┐  ┌───────────────────────────────┐    │
+│  │ Claude Code SDK  │  │    Permission Manager         │    │
+│  └──────────────────┘  └───────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   Storage Layer                              │
+│  ┌──────────────────┐  ┌───────────────────────────────┐    │
+│  │   Redis Storage  │  │      Memory Storage           │    │
+│  └──────────────────┘  └───────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 消息流程
 
 ```mermaid
 sequenceDiagram
-    participant User
+    participant User as 用户
     participant TG as Telegram
-    participant Bot as Telegram Bot
+    participant Bot as C2ME Bot
     participant Claude as Claude Code SDK
     participant PM as Permission Manager
 
-    User->>TG: Send message
-    TG->>Bot: Poll/receive message
-    Bot->>Claude: Process message via SDK
+    User->>TG: 发送消息
+    TG->>Bot: 轮询接收
+    Bot->>Claude: 处理请求
 
-    alt Tool requires permission
-        Claude->>PM: Request permission
-        PM->>TG: Send permission request to user
-        TG->>User: Show permission dialog
-        User->>TG: Approve/Deny
-        TG->>PM: User response
-        PM->>Claude: Return permission result
+    alt 需要工具权限
+        Claude->>PM: 请求权限
+        PM->>TG: 发送审批请求
+        TG->>User: 显示审批对话框
+        User->>TG: 批准/拒绝
+        TG->>PM: 返回结果
+        PM->>Claude: 权限结果
     end
 
-    Claude->>Bot: Return response
-    Bot->>TG: Send response
-    TG->>User: Display message
+    Claude->>Bot: 返回响应
+    Bot->>TG: 发送响应
+    TG->>User: 显示消息
 ```
 
-The architecture follows this flow:
-
-1. **User Input**: User sends a message through Telegram
-2. **Message Reception**: Bot polls Telegram API and receives the message
-3. **Claude Processing**: Message is forwarded to Claude Code SDK for processing
-4. **Permission Check**: If Claude requires tool use permissions:
-   - Claude Code SDK calls the permission manager's canUseTool function
-   - Permission manager sends permission request to user via Telegram
-   - User approves or denies the request through inline keyboard
-   - Permission manager returns the permission result to Claude Code SDK
-5. **Response Generation**: Claude processes the request and generates response
-6. **Message Delivery**: Bot sends the formatted response back to user via Telegram
-
-## Development
-
-### Project Structure
+### 目录结构
 
 ```
-src/
-├── config/          # Configuration management
-├── constants/       # Constants and messages
-├── handlers/        # Core handlers
-│   ├── claude.ts    # Claude Code integration
-│   ├── telegram.ts  # Telegram coordination
-│   ├── github.ts    # GitHub operations
-│   ├── directory.ts # Directory management
-│   └── telegram/    # Telegram-specific handlers
-├── models/          # Data models and types
-
-├── queue/          # Message batching
-├── server/         # Express server for webhooks
-├── services/       # Business logic services
-├── storage/        # Storage abstraction layer
-└── utils/          # Utility functions
-
-workers/            # Cloudflare Workers integration
+c2me/
+├── src/
+│   ├── config/           # 配置管理
+│   ├── constants/        # 常量定义
+│   ├── handlers/         # 核心处理器
+│   │   ├── claude.ts     # Claude SDK 集成
+│   │   ├── telegram.ts   # Telegram 协调器
+│   │   └── telegram/     # Telegram 子处理器
+│   ├── models/           # 数据模型
+│   ├── queue/            # 消息队列
+│   ├── services/         # 业务服务
+│   ├── storage/          # 存储抽象
+│   └── utils/            # 工具函数
+│       ├── logger.ts     # Pino 日志
+│       ├── metrics.ts    # 性能指标
+│       └── rate-limiter.ts
+├── desktop/              # Tauri 桌面应用
+│   ├── src/              # React 前端
+│   └── src-tauri/        # Rust 后端
+├── workers/              # Cloudflare Workers
+└── tests/                # 测试文件
+    ├── unit/             # 单元测试
+    └── integration/      # 集成测试
 ```
 
-### Available Scripts
+## 🧪 测试
 
-Use `pnpm`, `npm`, or `yarn` to run these scripts:
+```bash
+# 运行所有测试
+pnpm test
 
-- `[pnpm|npm|yarn] run build` - Build TypeScript to JavaScript
-- `[pnpm|npm|yarn] start` - Start the production bot  
-- `[pnpm|npm|yarn] run dev` - Start development server with watch mode
-- `[pnpm|npm|yarn] run watch` - Watch mode for development
-- `[pnpm|npm|yarn] run lint` - Run ESLint
-- `[pnpm|npm|yarn] run lint:fix` - Fix linting issues
-- `[pnpm|npm|yarn] run format` - Format code with Prettier
+# 监视模式
+pnpm test:watch
 
-### Key Components
+# 覆盖率报告
+pnpm test:coverage
+```
 
-#### Claude Manager
-Handles all interactions with the Claude Code SDK, including:
-- Message streaming and processing
-- Session management and resumption
-- Tool use detection and extraction
-- Query abortion and lifecycle management
+### 测试覆盖
 
-#### Telegram Handler
-Coordinates all Telegram bot functionality:
-- Command routing and processing
-- Message handling and formatting
-- Callback query management
-- File browser integration
+| 模块 | 测试数 | 状态 |
+|------|--------|------|
+| AsyncQueue | 15 | ✅ |
+| RateLimiter | 11 | ✅ |
+| MemoryStorage | 17 | ✅ |
+| UserSession | 18 | ✅ |
+| MessageBatcher | 10 | ✅ |
+| Claude Flow | 18 | ✅ |
+| **总计** | **89** | ✅ |
 
-#### Storage Layer
-Provides abstraction for user session storage:
-- Redis backend for production
-- Memory backend for development
-- Session timeout and cleanup
-- User authentication state
+## 📦 开发指南
 
-## Contributing
+### 可用脚本
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a pull request
+```bash
+pnpm run build      # 构建生产版本
+pnpm run dev        # 开发模式运行
+pnpm run lint       # ESLint 检查
+pnpm run lint:fix   # 自动修复 lint 问题
+pnpm run format     # Prettier 格式化
+pnpm test           # 运行测试
+```
 
-## License
+### 技术栈
 
-MIT License - see LICENSE file for details
+| 类别 | 技术 |
+|------|------|
+| 运行时 | Node.js 18+ |
+| 语言 | TypeScript 5.8 |
+| Telegram SDK | Telegraf 4.x |
+| AI SDK | @anthropic-ai/claude-agent-sdk |
+| 存储 | Redis / Memory |
+| 日志 | Pino |
+| 测试 | Vitest |
+| 桌面应用 | Tauri 2.0 (Rust + React) |
+| 边缘服务 | Cloudflare Workers |
 
-## Support
+## 🤝 贡献
 
-For issues and questions:
-- Check the existing issues
-- Create a new issue with detailed information
-- Include logs and configuration (without sensitive data)
+欢迎贡献代码！请遵循以下步骤：
 
-## Star History
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 提交 Pull Request
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Nickqiaoo/chatcode&type=Date)](https://www.star-history.com/#Nickqiaoo/chatcode&Date)
+## 📄 许可证
+
+MIT License - 详见 [LICENSE](LICENSE) 文件
+
+## 🔗 相关链接
+
+- [Claude Code 官方文档](https://docs.anthropic.com/en/docs/claude-code)
+- [Telegram Bot API](https://core.telegram.org/bots/api)
+- [Tauri 官方文档](https://tauri.app/)
+
+---
+
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/poer2023">poer2023</a>
+</p>
