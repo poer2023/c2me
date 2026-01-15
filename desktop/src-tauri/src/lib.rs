@@ -692,13 +692,12 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&start_i, &stop_i, &restart_i, &dashboard_i, &quit_i])?;
 
             // Create tray icon with icon from resources
-            let tray = TrayIconBuilder::new()
-                .id("main")
+            let tray = TrayIconBuilder::with_id(app, "main")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .tooltip("ChatCode Bot • Stopped")
-                .on_menu_event(|app, event| match event.id.as_ref() {
+                .on_menu_event(|app: &AppHandle, event| match event.id.as_ref() {
                     "quit" => {
                         app.exit(0);
                     }
