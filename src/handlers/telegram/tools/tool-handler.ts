@@ -6,6 +6,7 @@ import { MessageFormatter } from '../../../utils/formatter';
 import { Config } from '../../../config/config';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { ClaudeManager } from '../../claude';
+import { ProgressManager } from '../../../utils/progress-manager';
 
 export interface ToolInfo {
   toolId: string;
@@ -16,6 +17,7 @@ export interface ToolInfo {
 
 export class ToolHandler {
   private telegramSender: TelegramSender;
+  private progressManager: ProgressManager | null = null;
 
   constructor(
     private storage: IStorage,
@@ -27,8 +29,20 @@ export class ToolHandler {
     this.telegramSender = new TelegramSender(bot);
   }
 
+  /**
+   * Set progress manager instance for tool status updates
+   */
+  setProgressManager(progressManager: ProgressManager): void {
+    this.progressManager = progressManager;
+  }
+
   async handleToolUse(chatId: number, message: any, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
     const input = this.extractToolInput(message, toolInfo.toolName);
+
+    // Update progress status with current tool
+    if (this.progressManager) {
+      this.progressManager.updateTool(chatId, toolInfo.toolName, input);
+    }
 
     // Check if this is an Edit, MultiEdit, or Write tool and workers is enabled
     if (this.config.workers.enabled && (toolInfo.toolName === TargetTool.Edit || toolInfo.toolName === TargetTool.MultiEdit || toolInfo.toolName === TargetTool.Write)) {

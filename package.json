@@ -1,6 +1,6 @@
 {
   "name": "c2me",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Telegram bot for Claude Code integration",
   "main": "dist/main.js",
   "scripts": {
@@ -21,9 +21,11 @@
     "@gramio/format": "^0.3.3",
     "@gramio/split": "^0.0.1",
     "@modelcontextprotocol/sdk": "^1.17.0",
+    "bullmq": "^5.66.5",
     "diff": "^8.0.2",
     "dotenv": "^16.6.1",
     "express": "^4.21.2",
+    "lru-cache": "^11.2.4",
     "markdown-it": "^14.1.0",
     "marked": "^16.1.1",
     "node-fetch": "^3.3.2",
@@ -34,6 +36,7 @@
     "telegraf": "^4.16.3",
     "telegram-format": "^3.1.0",
     "ws": "^8.18.3",
+    "xxhash-wasm": "^1.1.0",
     "zod": "^4.0.13"
   },
   "devDependencies": {

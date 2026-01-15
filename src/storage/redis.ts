@@ -3,6 +3,15 @@ import { UserSessionModel } from '../models/user-session';
 import { Project } from '../models/project';
 import { IStorage } from './interface';
 import { logger } from '../utils/logger';
+import {
+  UserActivity,
+  UserActivityUpdate,
+  AnalyticsSnapshot,
+  UserActivitySummary,
+  createEmptyUserActivity,
+  getDateKey,
+  isActiveInLastNDays,
+} from '../models/analytics';
 
 interface BufferedWrite {
   data: string;
@@ -16,9 +25,12 @@ export class RedisStorage implements IStorage {
   private readonly USER_SESSION_PREFIX = 'user_session:';
   private readonly USER_PROJECTS_PREFIX = 'user_projects:';
   private readonly TOOL_USE_PREFIX = 'tool_use:';
+  private readonly USER_ACTIVITY_PREFIX = 'user_activity:';
+  private readonly USER_ACTIVITY_LIST_KEY = 'user_activity_list';
   private readonly SESSION_TTL = 3 * 60 * 60; // 3 hours in seconds
   private readonly TOOL_USE_TTL = 30 * 60; // 30 minutes in seconds
   private readonly PROJECT_TTL = 15 * 24 * 60 * 60; // 15 days in seconds
+  private readonly ACTIVITY_TTL = 90 * 24 * 60 * 60; // 90 days in seconds
 
   // Write buffer configuration
   private writeBuffer: Map<string, BufferedWrite> = new Map();
@@ -322,5 +334,140 @@ export class RedisStorage implements IStorage {
       project.lastAccessed = new Date();
       await this.saveProject(project);
     }
+  }
+
+  // User analytics methods (Phase 2)
+  private getUserActivityKey(chatId: number): string {
+    return `${this.USER_ACTIVITY_PREFIX}${chatId}`;
+  }
+
+  async trackUserActivity(update: UserActivityUpdate): Promise<void> {
+    const { chatId, username, firstName, lastName, command, timestamp } = update;
+    const now = timestamp || new Date();
+    const dateKey = getDateKey(now);
+    const key = this.getUserActivityKey(chatId);
+
+    // Get existing activity or create new
+    let activity = await this.getUserActivity(chatId);
+    if (!activity) {
+      activity = createEmptyUserActivity(chatId);
+    }
+
+    // Update user info
+    if (username) activity.username = username;
+    if (firstName) activity.firstName = firstName;
+    if (lastName) activity.lastName = lastName;
+
+    // Update activity
+    activity.lastSeen = now;
+    activity.messageCount++;
+
+    // Update daily activity
+    activity.dailyActivity[dateKey] = (activity.dailyActivity[dateKey] || 0) + 1;
+
+    // Update command usage
+    if (command) {
+      activity.commandUsage[command] = (activity.commandUsage[command] || 0) + 1;
+    }
+
+    // Save to Redis
+    const activityData = {
+      ...activity,
+      firstSeen: activity.firstSeen.toISOString(),
+      lastSeen: activity.lastSeen.toISOString(),
+    };
+    await this.client.set(key, JSON.stringify(activityData), { EX: this.ACTIVITY_TTL });
+
+    // Add to user list for enumeration
+    await this.client.sAdd(this.USER_ACTIVITY_LIST_KEY, chatId.toString());
+  }
+
+  async getUserActivity(chatId: number): Promise<UserActivity | null> {
+    const key = this.getUserActivityKey(chatId);
+    const data = await this.client.get(key);
+
+    if (!data) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(data);
+      return {
+        ...parsed,
+        firstSeen: new Date(parsed.firstSeen),
+        lastSeen: new Date(parsed.lastSeen),
+      };
+    } catch (error) {
+      console.error('Error parsing user activity:', error);
+      return null;
+    }
+  }
+
+  async getAllUserActivities(): Promise<UserActivity[]> {
+    const chatIds = await this.client.sMembers(this.USER_ACTIVITY_LIST_KEY);
+    const activities: UserActivity[] = [];
+
+    for (const chatIdStr of chatIds) {
+      const chatId = parseInt(chatIdStr, 10);
+      const activity = await this.getUserActivity(chatId);
+      if (activity) {
+        activities.push(activity);
+      }
+    }
+
+    return activities.sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime());
+  }
+
+  async getAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
+    const activities = await this.getAllUserActivities();
+    const now = new Date();
+
+    // Calculate DAU/WAU/MAU
+    const dau = activities.filter(a => isActiveInLastNDays(a.lastSeen, 1)).length;
+    const wau = activities.filter(a => isActiveInLastNDays(a.lastSeen, 7)).length;
+    const mau = activities.filter(a => isActiveInLastNDays(a.lastSeen, 30)).length;
+
+    // Calculate totals
+    const totalUsers = activities.length;
+    const totalMessages = activities.reduce((sum, a) => sum + a.messageCount, 0);
+    const totalSessions = activities.reduce((sum, a) => sum + a.sessionCount, 0);
+
+    // Calculate top commands
+    const commandCounts: Record<string, number> = {};
+    for (const activity of activities) {
+      for (const [cmd, count] of Object.entries(activity.commandUsage)) {
+        commandCounts[cmd] = (commandCounts[cmd] || 0) + count;
+      }
+    }
+    const topCommands = Object.entries(commandCounts)
+      .map(([command, count]) => ({ command, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Get recent users
+    const recentUsers: UserActivitySummary[] = activities
+      .slice(0, 50)
+      .map(a => ({
+        chatId: a.chatId,
+        username: a.username,
+        firstName: a.firstName,
+        lastName: a.lastName,
+        lastSeen: a.lastSeen,
+        messageCount: a.messageCount,
+        sessionCount: a.sessionCount,
+        isActive: isActiveInLastNDays(a.lastSeen, 1),
+      }));
+
+    return {
+      dau,
+      wau,
+      mau,
+      totalUsers,
+      totalMessages,
+      totalSessions,
+      topCommands,
+      recentUsers,
+      generatedAt: now,
+    };
   }
 }

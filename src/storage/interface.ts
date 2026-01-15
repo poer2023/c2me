@@ -1,5 +1,6 @@
 import { UserSessionModel } from '../models/user-session';
 import { Project } from '../models/project';
+import { UserActivity, UserActivityUpdate, AnalyticsSnapshot } from '../models/analytics';
 
 export interface ToolData {
   name: string;
@@ -38,4 +39,10 @@ export interface IStorage {
   saveProject(project: Project): Promise<void>;
   deleteProject(projectId: string, userId: number): Promise<void>;
   updateProjectLastAccessed(projectId: string, userId: number): Promise<void>;
+
+  // User analytics (Phase 2)
+  trackUserActivity(update: UserActivityUpdate): Promise<void>;
+  getUserActivity(chatId: number): Promise<UserActivity | null>;
+  getAllUserActivities(): Promise<UserActivity[]>;
+  getAnalyticsSnapshot(): Promise<AnalyticsSnapshot>;
 }
