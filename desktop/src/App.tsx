@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { LiquidGlassFilters } from './components/LiquidGlassFilters';
+import { MetricsPanel } from './components/MetricsPanel';
 import './App.css';
 
 interface BotStatus {
@@ -37,15 +38,48 @@ function App() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
   const [config, setConfig] = useState<Config | null>(null);
-  const [activeTab, setActiveTab] = useState<'status' | 'logs' | 'config'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'logs' | 'metrics' | 'config'>('status');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
+  const [autostart, setAutostart] = useState<boolean>(false);
 
-  // Fetch project path on mount
+  // Log filtering state
+  const [logSearch, setLogSearch] = useState<string>('');
+  const [logLevelFilter, setLogLevelFilter] = useState<Set<string>>(new Set(['info', 'warn', 'error']));
+
+  // Filtered logs based on search and level filters
+  const filteredLogs = useMemo(() => {
+    return logs.filter(log => {
+      // Level filter
+      if (!logLevelFilter.has(log.level.toLowerCase())) {
+        return false;
+      }
+      // Search filter
+      if (logSearch && !log.message.toLowerCase().includes(logSearch.toLowerCase())) {
+        return false;
+      }
+      return true;
+    });
+  }, [logs, logSearch, logLevelFilter]);
+
+  const toggleLogLevel = (level: string) => {
+    setLogLevelFilter(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(level)) {
+        newSet.delete(level);
+      } else {
+        newSet.add(level);
+      }
+      return newSet;
+    });
+  };
+
+  // Fetch project path and autostart status on mount
   useEffect(() => {
     invoke<string>('get_project_path').then(setProjectPath);
+    invoke<boolean>('get_autostart_enabled').then(setAutostart).catch(() => setAutostart(false));
   }, []);
 
   // Listen for log events
@@ -190,6 +224,12 @@ function App() {
             Status
           </button>
           <button
+            className={`tab ${activeTab === 'metrics' ? 'active' : ''}`}
+            onClick={() => setActiveTab('metrics')}
+          >
+            Metrics
+          </button>
+          <button
             className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
             onClick={() => setActiveTab('logs')}
           >
@@ -249,6 +289,10 @@ function App() {
         </div>
       )}
 
+      {activeTab === 'metrics' && (
+        <MetricsPanel isRunning={status?.is_running || false} />
+      )}
+
       {activeTab === 'logs' && (
         <div className="logs-panel">
           <div className="logs-header">
@@ -261,11 +305,44 @@ function App() {
               Clear Logs
             </button>
           </div>
+          <div className="logs-filters">
+            <input
+              type="text"
+              className="log-filter-input"
+              placeholder="Search logs..."
+              value={logSearch}
+              onChange={(e) => setLogSearch(e.target.value)}
+            />
+            <div className="log-level-filters">
+              <button
+                className={`log-level-btn level-info ${logLevelFilter.has('info') ? 'active' : ''}`}
+                onClick={() => toggleLogLevel('info')}
+              >
+                INFO
+              </button>
+              <button
+                className={`log-level-btn level-warn ${logLevelFilter.has('warn') ? 'active' : ''}`}
+                onClick={() => toggleLogLevel('warn')}
+              >
+                WARN
+              </button>
+              <button
+                className={`log-level-btn level-error ${logLevelFilter.has('error') ? 'active' : ''}`}
+                onClick={() => toggleLogLevel('error')}
+              >
+                ERROR
+              </button>
+            </div>
+          </div>
           <div className="logs-container">
-            {logs.length === 0 ? (
-              <div className="logs-empty">No logs yet. Start the bot to see logs.</div>
+            {filteredLogs.length === 0 ? (
+              <div className="logs-empty">
+                {logs.length === 0
+                  ? 'No logs yet. Start the bot to see logs.'
+                  : 'No logs match your filters.'}
+              </div>
             ) : (
-              logs.map((log, index) => (
+              filteredLogs.map((log, index) => (
                 <div key={index} className={`log-entry log-${log.level}`}>
                   <span className="log-timestamp">{log.timestamp}</span>
                   <span className={`log-level log-level-${log.level}`}>{log.level.toUpperCase()}</span>
@@ -344,6 +421,27 @@ function App() {
               <option value="warn">Warn</option>
               <option value="error">Error</option>
             </select>
+          </div>
+
+          <div className="form-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={autostart}
+                onChange={async (e) => {
+                  const enabled = e.target.checked;
+                  try {
+                    await invoke('set_autostart_enabled', { enabled });
+                    setAutostart(enabled);
+                    showMessage('success', enabled ? 'Auto-start enabled' : 'Auto-start disabled');
+                  } catch (error) {
+                    showMessage('error', `Failed to set auto-start: ${error}`);
+                  }
+                }}
+              />
+              <span>Launch at startup</span>
+            </label>
+            <p className="form-hint">Automatically start ChatCode when you log in</p>
           </div>
 
           <div className="controls">

@@ -64,7 +64,13 @@ async function main(): Promise<void> {
     );
 
     console.log('Telegram handler initialized with callback architecture');
-    
+
+    // Always start metrics server (port 3002) for dashboard integration
+    const metricsServer = new ExpressServer(bot, 3002);
+    metricsServer.setupRoutes();
+    await metricsServer.start();
+    console.log('Metrics server started on port 3002');
+
     if (config.telegram.mode === 'webhook') {
       if (!config.webhook) {
         throw new Error('Webhook configuration is missing');

@@ -41,6 +41,12 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "notification": {
+      "all": true
+    },
+    "global-shortcut": {
+      "all": true
     }
   }
 }

@@ -9,6 +9,43 @@ use tauri::{
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, RunEvent, State, WindowEvent,
 };
+use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
+use tauri_plugin_notification::NotificationExt;
+
+// Helper function to send system notification
+fn send_notification(app: &AppHandle, title: &str, body: &str) {
+    let _ = app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show();
+}
+
+// Helper function to update tray tooltip based on bot status
+fn update_tray_status(app: &AppHandle, is_running: bool, uptime_secs: Option<u64>) {
+    use tauri::tray::TrayIconId;
+    if let Some(tray) = app.tray_by_id(&TrayIconId::new("main")) {
+        let tooltip = if is_running {
+            if let Some(secs) = uptime_secs {
+                let hours = secs / 3600;
+                let minutes = (secs % 3600) / 60;
+                if hours > 0 {
+                    format!("ChatCode Bot • Running ({}h {}m)", hours, minutes)
+                } else if minutes > 0 {
+                    format!("ChatCode Bot • Running ({}m)", minutes)
+                } else {
+                    "ChatCode Bot • Running".to_string()
+                }
+            } else {
+                "ChatCode Bot • Running".to_string()
+            }
+        } else {
+            "ChatCode Bot • Stopped".to_string()
+        };
+        let _ = tray.set_tooltip(Some(&tooltip));
+    }
+}
 
 // Bot process state
 pub struct BotState {
@@ -296,11 +333,76 @@ fn save_config(
     std::fs::write(&env_path, content).map_err(|e| format!("Failed to write .env file: {}", e))
 }
 
+#[tauri::command]
+fn get_autostart_enabled(app: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_autostart::ManagerExt;
+    app.autolaunch()
+        .is_enabled()
+        .map_err(|e| format!("Failed to get autostart status: {}", e))
+}
+
+#[tauri::command]
+fn set_autostart_enabled(app: AppHandle, enabled: bool) -> Result<(), String> {
+    use tauri_plugin_autostart::ManagerExt;
+    let autostart = app.autolaunch();
+    if enabled {
+        autostart.enable().map_err(|e| format!("Failed to enable autostart: {}", e))
+    } else {
+        autostart.disable().map_err(|e| format!("Failed to disable autostart: {}", e))
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct BotMetrics {
+    counters: serde_json::Value,
+    histograms: serde_json::Value,
+    gauges: serde_json::Value,
+    timestamp: String,
+}
+
+#[tauri::command]
+fn fetch_metrics() -> Result<BotMetrics, String> {
+    // Fetch metrics from the bot's HTTP endpoint
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    let response = client
+        .get("http://localhost:3002/metrics")
+        .send()
+        .map_err(|e| format!("Failed to fetch metrics: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Metrics endpoint returned status: {}", response.status()));
+    }
+
+    let metrics: serde_json::Value = response
+        .json()
+        .map_err(|e| format!("Failed to parse metrics JSON: {}", e))?;
+
+    Ok(BotMetrics {
+        counters: metrics.get("counters").cloned().unwrap_or(serde_json::Value::Null),
+        histograms: metrics.get("histograms").cloned().unwrap_or(serde_json::Value::Null),
+        gauges: metrics.get("gauges").cloned().unwrap_or(serde_json::Value::Null),
+        timestamp: metrics.get("timestamp")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // When a second instance is launched, show the dashboard window
             if let Some(window) = app.get_webview_window("main") {
@@ -327,10 +429,11 @@ pub fn run() {
 
             // Create tray icon with icon from resources
             let tray = TrayIconBuilder::new()
+                .id("main")
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
                 .show_menu_on_left_click(true)
-                .tooltip("ChatCode Bot")
+                .tooltip("ChatCode Bot • Stopped")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "quit" => {
                         app.exit(0);
@@ -349,14 +452,22 @@ pub fn run() {
                         let state: State<BotState> = app.state();
                         let project_path = get_project_path();
                         match start_bot_internal(app.clone(), &state, project_path) {
-                            Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                            Ok(msg) => {
+                                send_notification(app, "ChatCode Bot", "Bot started successfully");
+                                update_tray_status(app, true, None);
+                                let _ = app.emit("bot-status", msg);
+                            }
                             Err(e) => { let _ = app.emit("bot-error", e); }
                         }
                     }
                     "stop" => {
                         let state: State<BotState> = app.state();
                         match stop_bot_internal(&state) {
-                            Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                            Ok(msg) => {
+                                send_notification(app, "ChatCode Bot", "Bot stopped");
+                                update_tray_status(app, false, None);
+                                let _ = app.emit("bot-status", msg);
+                            }
                             Err(e) => { let _ = app.emit("bot-error", e); }
                         }
                     }
@@ -368,7 +479,11 @@ pub fn run() {
                         thread::sleep(Duration::from_millis(300));
                         // Start again
                         match start_bot_internal(app.clone(), &state, project_path) {
-                            Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                            Ok(msg) => {
+                                send_notification(app, "ChatCode Bot", "Bot restarted successfully");
+                                update_tray_status(app, true, None);
+                                let _ = app.emit("bot-status", msg);
+                            }
                             Err(e) => { let _ = app.emit("bot-error", e); }
                         }
                     }
@@ -445,14 +560,20 @@ pub fn run() {
                             let state: State<BotState> = app.state();
                             let project_path = get_project_path();
                             match start_bot_internal(app.clone(), &state, project_path) {
-                                Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                                Ok(msg) => {
+                                    update_tray_status(app, true, None);
+                                    let _ = app.emit("bot-status", msg);
+                                }
                                 Err(e) => { let _ = app.emit("bot-error", e); }
                             }
                         }
                         "menu_stop" => {
                             let state: State<BotState> = app.state();
                             match stop_bot_internal(&state) {
-                                Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                                Ok(msg) => {
+                                    update_tray_status(app, false, None);
+                                    let _ = app.emit("bot-status", msg);
+                                }
                                 Err(e) => { let _ = app.emit("bot-error", e); }
                             }
                         }
@@ -462,7 +583,10 @@ pub fn run() {
                             let _ = stop_bot_internal(&state);
                             thread::sleep(Duration::from_millis(300));
                             match start_bot_internal(app.clone(), &state, project_path) {
-                                Ok(msg) => { let _ = app.emit("bot-status", msg); }
+                                Ok(msg) => {
+                                    update_tray_status(app, true, None);
+                                    let _ = app.emit("bot-status", msg);
+                                }
                                 Err(e) => { let _ = app.emit("bot-error", e); }
                             }
                         }
@@ -479,6 +603,36 @@ pub fn run() {
                 });
             }
 
+            // Register global shortcut (Cmd+Shift+C to toggle bot)
+            #[cfg(desktop)]
+            {
+                let app_handle = app.handle().clone();
+                let shortcut = Shortcut::new(Some(Modifiers::SUPER | Modifiers::SHIFT), Code::KeyC);
+
+                app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, _event| {
+                    let state: State<BotState> = app_handle.state();
+                    let is_running = {
+                        let process = state.process.lock().unwrap();
+                        process.is_some()
+                    };
+
+                    if is_running {
+                        let _ = stop_bot_internal(&state);
+                        update_tray_status(&app_handle, false, None);
+                        let _ = app_handle.emit("bot-status", "Bot stopped via shortcut");
+                    } else {
+                        let project_path = get_project_path();
+                        match start_bot_internal(app_handle.clone(), &state, project_path) {
+                            Ok(msg) => {
+                                update_tray_status(&app_handle, true, None);
+                                let _ = app_handle.emit("bot-status", msg);
+                            }
+                            Err(e) => { let _ = app_handle.emit("bot-error", e); }
+                        }
+                    }
+                })?;
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -489,7 +643,10 @@ pub fn run() {
             get_bot_health,
             get_project_path,
             load_config,
-            save_config
+            save_config,
+            get_autostart_enabled,
+            set_autostart_enabled,
+            fetch_metrics
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

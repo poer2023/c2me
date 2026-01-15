@@ -1,6 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { Telegraf } from 'telegraf';
 import { WebhookConfig } from '../config/config';
+import { getMetricsSnapshot, MetricsSnapshot } from '../utils/metrics';
 
 export class ExpressServer {
   private app: express.Application;
@@ -30,16 +31,26 @@ export class ExpressServer {
   public setupRoutes(): void {
     // Health check endpoint
     this.app.get('/health', (_req: Request, res: Response) => {
-      res.json({ 
-        status: 'ok', 
+      res.json({
+        status: 'ok',
         timestamp: new Date().toISOString(),
         mode: 'webhook'
       });
     });
 
+    // Metrics endpoint for dashboard
+    this.app.get('/metrics', (_req: Request, res: Response) => {
+      try {
+        const metrics: MetricsSnapshot = getMetricsSnapshot();
+        res.json(metrics);
+      } catch (error) {
+        res.status(500).json({ error: 'Failed to get metrics' });
+      }
+    });
+
     // Root endpoint
     this.app.get('/', (_req: Request, res: Response) => {
-      res.json({ 
+      res.json({
         message: 'Telegram Bot Webhook Server',
         status: 'running'
       });
