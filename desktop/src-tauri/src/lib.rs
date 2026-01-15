@@ -23,27 +23,11 @@ fn send_notification(app: &AppHandle, title: &str, body: &str) {
 }
 
 // Helper function to update tray tooltip based on bot status
-fn update_tray_status(app: &AppHandle, is_running: bool, uptime_secs: Option<u64>) {
-    if let Some(tray) = app.tray_by_id("main") {
-        let tooltip = if is_running {
-            if let Some(secs) = uptime_secs {
-                let hours = secs / 3600;
-                let minutes = (secs % 3600) / 60;
-                if hours > 0 {
-                    format!("ChatCode Bot • Running ({}h {}m)", hours, minutes)
-                } else if minutes > 0 {
-                    format!("ChatCode Bot • Running ({}m)", minutes)
-                } else {
-                    "ChatCode Bot • Running".to_string()
-                }
-            } else {
-                "ChatCode Bot • Running".to_string()
-            }
-        } else {
-            "ChatCode Bot • Stopped".to_string()
-        };
-        let _ = tray.set_tooltip(Some(&tooltip));
-    }
+// Note: Temporarily disabled for Tauri 2.0 compatibility
+// TODO: Implement proper tray state management using managed state
+fn update_tray_status(_app: &AppHandle, _is_running: bool, _uptime_secs: Option<u64>) {
+    // Tray tooltip updates disabled for now
+    // Tauri 2.0 requires storing TrayIcon in managed state to access later
 }
 
 // Bot process state
