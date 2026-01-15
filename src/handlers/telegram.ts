@@ -16,6 +16,7 @@ import { MessageHandler } from './telegram/messages/message-handler';
 import { ToolHandler } from './telegram/tools/tool-handler';
 import { FileBrowserHandler } from './telegram/file-browser/file-browser-handler';
 import { ProjectHandler } from './telegram/project/project-handler';
+import { ProgressControlHandler } from './telegram/progress/progress-control-handler';
 
 export class TelegramHandler {
   private bot: Telegraf;
@@ -26,7 +27,7 @@ export class TelegramHandler {
   private formatter: MessageFormatter;
   private config: Config;
   private permissionManager: PermissionManager;
-  
+
   // Handlers
   private commandHandler: CommandHandler;
   private callbackHandler: CallbackHandler;
@@ -34,6 +35,7 @@ export class TelegramHandler {
   private toolHandler: ToolHandler;
   private fileBrowserHandler: FileBrowserHandler;
   private projectHandler: ProjectHandler;
+  private progressControlHandler: ProgressControlHandler;
 
   constructor(
     bot: Telegraf,
@@ -62,8 +64,22 @@ export class TelegramHandler {
     this.fileBrowserHandler = new FileBrowserHandler(this.storage, this.directory, this.formatter, this.config, this.bot);
     this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.bot, this.permissionManager);
 
+    // Initialize progress control handler
+    this.progressControlHandler = new ProgressControlHandler(this.bot, this.messageHandler.getProgressManager());
+
     // Connect progress manager to tool handler
     this.toolHandler.setProgressManager(this.messageHandler.getProgressManager());
+
+    // Connect progress control handler to callback handler
+    this.callbackHandler.setProgressControlHandler(this.progressControlHandler);
+
+    // Set up rate limit notification
+    this.messageHandler.getProgressManager().onGlobalRateLimit((chatId, retryAfter) => {
+      this.bot.telegram.sendMessage(
+        chatId,
+        `⚠️ Rate limit detected. Pausing for ${retryAfter}s to avoid API restrictions.`
+      ).catch(() => {});
+    });
 
     this.setupHandlers();
   }
@@ -121,6 +137,10 @@ export class TelegramHandler {
     this.bot.command('acceptedits', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.AcceptEdits));
     this.bot.command('plan', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Plan));
     this.bot.command('bypass', (ctx) => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.BypassPermissions));
+
+    // Progress control commands
+    this.bot.command('progress', (ctx) => this.progressControlHandler.handleProgressCommand(ctx));
+    this.bot.command('progressstats', (ctx) => this.progressControlHandler.handleProgressStatsCommand(ctx));
 
     // Text message handler
     this.bot.on(message('text'), (ctx) => this.messageHandler.handleTextMessage(ctx));

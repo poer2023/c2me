@@ -5,8 +5,11 @@ import { ProjectHandler } from '../project/project-handler';
 import { FileBrowserHandler } from '../file-browser/file-browser-handler';
 import { UserState } from '../../../models/types';
 import { PermissionManager } from '../../permission-manager';
+import { ProgressControlHandler } from '../progress/progress-control-handler';
 
 export class CallbackHandler {
+  private progressControlHandler: ProgressControlHandler | null = null;
+
   constructor(
     private formatter: MessageFormatter,
     private projectHandler: ProjectHandler,
@@ -16,6 +19,13 @@ export class CallbackHandler {
     private permissionManager: PermissionManager
   ) {}
 
+  /**
+   * Set progress control handler (called after initialization)
+   */
+  setProgressControlHandler(handler: ProgressControlHandler): void {
+    this.progressControlHandler = handler;
+  }
+
   async handleCallback(ctx: Context): Promise<void> {
     if (!ctx.callbackQuery || !ctx.chat) return;
     if (!('data' in ctx.callbackQuery)) return;
@@ -23,6 +33,16 @@ export class CallbackHandler {
     const data = ctx.callbackQuery.data;
     const chatId = ctx.chat.id;
     const messageId = ctx.callbackQuery?.message?.message_id;
+
+    // Handle progress callbacks separately (they manage their own answerCbQuery)
+    if (data?.startsWith('progress:')) {
+      if (this.progressControlHandler) {
+        await this.progressControlHandler.handleProgressCallback(ctx, data);
+      } else {
+        await ctx.answerCbQuery('Progress control not available');
+      }
+      return;
+    }
 
     await ctx.answerCbQuery();
 
