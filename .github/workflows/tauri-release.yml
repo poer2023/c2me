@@ -55,6 +55,11 @@ jobs:
         working-directory: desktop
         run: pnpm install --frozen-lockfile
 
+      - name: Bundle bot source code
+        run: |
+          chmod +x desktop/scripts/bundle-bot.sh
+          desktop/scripts/bundle-bot.sh
+
       - name: Build Tauri app
         uses: tauri-apps/tauri-action@v0
         env:

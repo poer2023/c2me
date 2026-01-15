@@ -1,6 +1,6 @@
 [package]
 name = "chatcode-desktop"
-version = "0.1.0"
+version = "1.3.0"
 description = "ChatCode Desktop - Telegram Bot Manager"
 authors = ["ChatCode Team"]
 edition = "2021"

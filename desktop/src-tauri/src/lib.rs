@@ -640,6 +640,130 @@ STORAGE_TYPE=memory
     Ok(())
 }
 
+// Bot bundle extraction commands
+
+#[tauri::command]
+fn get_bot_install_path() -> String {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    format!("{}/.chatcode/bot", home)
+}
+
+#[tauri::command]
+fn is_bot_extracted() -> bool {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let bot_path = format!("{}/.chatcode/bot/package.json", home);
+    std::path::Path::new(&bot_path).exists()
+}
+
+#[derive(Clone, Serialize)]
+pub struct ExtractionProgress {
+    stage: String,
+    message: String,
+    progress: u8,
+}
+
+#[tauri::command]
+fn extract_bot_bundle(app: AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+
+    // Emit initial progress
+    let _ = app.emit("extraction-progress", ExtractionProgress {
+        stage: "starting".to_string(),
+        message: "Preparing to extract bot files...".to_string(),
+        progress: 0,
+    });
+
+    // Get the resource path
+    let resource_path = app.path()
+        .resource_dir()
+        .map_err(|e| format!("Failed to get resource directory: {}", e))?
+        .join("resources/bot-bundle.tar.gz");
+
+    if !resource_path.exists() {
+        return Err(format!("Bot bundle not found at: {:?}", resource_path));
+    }
+
+    let _ = app.emit("extraction-progress", ExtractionProgress {
+        stage: "extracting".to_string(),
+        message: "Extracting bot files...".to_string(),
+        progress: 30,
+    });
+
+    // Create target directory
+    let home = std::env::var("HOME").map_err(|e| format!("Failed to get HOME: {}", e))?;
+    let chatcode_dir = format!("{}/.chatcode", home);
+    let target_dir = format!("{}/bot", chatcode_dir);
+
+    // Remove existing bot directory if exists
+    if std::path::Path::new(&target_dir).exists() {
+        std::fs::remove_dir_all(&target_dir)
+            .map_err(|e| format!("Failed to remove existing bot directory: {}", e))?;
+    }
+
+    // Create .chatcode directory
+    std::fs::create_dir_all(&chatcode_dir)
+        .map_err(|e| format!("Failed to create .chatcode directory: {}", e))?;
+
+    // Extract using tar command
+    let output = Command::new("tar")
+        .args([
+            "-xzf",
+            resource_path.to_str().unwrap(),
+            "-C",
+            &chatcode_dir,
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run tar: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to extract bot bundle: {}", stderr));
+    }
+
+    let _ = app.emit("extraction-progress", ExtractionProgress {
+        stage: "complete".to_string(),
+        message: "Bot files extracted successfully!".to_string(),
+        progress: 100,
+    });
+
+    Ok(target_dir)
+}
+
+#[tauri::command]
+fn detect_claude_code_path() -> Option<String> {
+    // Try common locations for Claude Code binary
+    let paths_to_check = vec![
+        // Homebrew on Apple Silicon
+        "/opt/homebrew/bin/claude",
+        // Homebrew on Intel
+        "/usr/local/bin/claude",
+        // npm global
+        "/usr/local/bin/claude-code",
+        // User local bin
+        &format!("{}/.local/bin/claude", std::env::var("HOME").unwrap_or_default()),
+        // Cargo bin
+        &format!("{}/.cargo/bin/claude", std::env::var("HOME").unwrap_or_default()),
+    ];
+
+    for path in paths_to_check {
+        if std::path::Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+
+    // Try which command
+    if let Ok(output) = Command::new("which").arg("claude").output() {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(path);
+            }
+        }
+    }
+
+    None
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -901,7 +1025,12 @@ pub fn run() {
             install_pnpm,
             check_setup_complete,
             mark_setup_complete,
-            create_env_file
+            create_env_file,
+            // Bot bundle commands
+            get_bot_install_path,
+            is_bot_extracted,
+            extract_bot_bundle,
+            detect_claude_code_path
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
