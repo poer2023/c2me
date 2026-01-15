@@ -24,8 +24,7 @@ fn send_notification(app: &AppHandle, title: &str, body: &str) {
 
 // Helper function to update tray tooltip based on bot status
 fn update_tray_status(app: &AppHandle, is_running: bool, uptime_secs: Option<u64>) {
-    use tauri::tray::TrayIconId;
-    if let Some(tray) = app.tray_by_id(&TrayIconId::new("main")) {
+    if let Some(tray) = app.tray_by_id("main") {
         let tooltip = if is_running {
             if let Some(secs) = uptime_secs {
                 let hours = secs / 3600;
