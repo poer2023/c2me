@@ -1052,6 +1052,11 @@ pub fn run() {
                         }
                     }
                 }
+                RunEvent::Exit => {
+                    // Clean up bot process before exit
+                    let state: State<BotState> = app.state();
+                    let _ = stop_bot_internal(&state);
+                }
                 _ => {}
             }
         });
