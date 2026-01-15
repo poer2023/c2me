@@ -429,6 +429,234 @@ fn fetch_metrics() -> Result<BotMetrics, String> {
     })
 }
 
+// Setup and dependency management
+
+#[derive(Clone, Serialize)]
+pub struct PrerequisiteStatus {
+    node_installed: bool,
+    node_version: Option<String>,
+    pnpm_installed: bool,
+    pnpm_version: Option<String>,
+    project_exists: bool,
+    dependencies_installed: bool,
+    env_configured: bool,
+}
+
+#[tauri::command]
+fn check_prerequisites(project_path: String) -> PrerequisiteStatus {
+    // Check Node.js
+    let node_result = Command::new("node")
+        .arg("--version")
+        .output();
+    let (node_installed, node_version) = match node_result {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            (true, Some(version))
+        }
+        _ => (false, None),
+    };
+
+    // Check pnpm
+    let pnpm_result = Command::new("pnpm")
+        .arg("--version")
+        .output();
+    let (pnpm_installed, pnpm_version) = match pnpm_result {
+        Ok(output) if output.status.success() => {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            (true, Some(version))
+        }
+        _ => (false, None),
+    };
+
+    // Check if project directory exists
+    let project_exists = std::path::Path::new(&project_path).exists();
+
+    // Check if node_modules exists
+    let node_modules_path = format!("{}/node_modules", project_path);
+    let dependencies_installed = std::path::Path::new(&node_modules_path).exists();
+
+    // Check if .env file exists and has required keys
+    let env_path = format!("{}/.env", project_path);
+    let env_configured = if let Ok(content) = std::fs::read_to_string(&env_path) {
+        content.contains("TG_BOT_TOKEN=") && content.contains("CLAUDE_CODE_PATH=")
+    } else {
+        false
+    };
+
+    PrerequisiteStatus {
+        node_installed,
+        node_version,
+        pnpm_installed,
+        pnpm_version,
+        project_exists,
+        dependencies_installed,
+        env_configured,
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct InstallProgress {
+    stage: String,
+    message: String,
+    progress: u8, // 0-100
+}
+
+#[tauri::command]
+fn install_dependencies(app: AppHandle, project_path: String) -> Result<String, String> {
+    // Emit initial progress
+    let _ = app.emit("install-progress", InstallProgress {
+        stage: "starting".to_string(),
+        message: "Starting dependency installation...".to_string(),
+        progress: 0,
+    });
+
+    // Run pnpm install
+    let output = Command::new("pnpm")
+        .args(["install", "--frozen-lockfile"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to run pnpm install: {}", e))?;
+
+    let _ = app.emit("install-progress", InstallProgress {
+        stage: "installing".to_string(),
+        message: "Installing packages...".to_string(),
+        progress: 50,
+    });
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        // Try without frozen lockfile
+        let retry_output = Command::new("pnpm")
+            .arg("install")
+            .current_dir(&project_path)
+            .output()
+            .map_err(|e| format!("Failed to run pnpm install: {}", e))?;
+
+        if !retry_output.status.success() {
+            let retry_stderr = String::from_utf8_lossy(&retry_output.stderr);
+            return Err(format!("pnpm install failed: {}", retry_stderr));
+        }
+    }
+
+    let _ = app.emit("install-progress", InstallProgress {
+        stage: "building".to_string(),
+        message: "Building TypeScript...".to_string(),
+        progress: 75,
+    });
+
+    // Run build
+    let build_output = Command::new("pnpm")
+        .args(["run", "build"])
+        .current_dir(&project_path)
+        .output()
+        .map_err(|e| format!("Failed to run build: {}", e))?;
+
+    if !build_output.status.success() {
+        let stderr = String::from_utf8_lossy(&build_output.stderr);
+        return Err(format!("Build failed: {}", stderr));
+    }
+
+    let _ = app.emit("install-progress", InstallProgress {
+        stage: "complete".to_string(),
+        message: "Installation complete!".to_string(),
+        progress: 100,
+    });
+
+    Ok("Dependencies installed and built successfully".to_string())
+}
+
+#[tauri::command]
+fn install_pnpm() -> Result<String, String> {
+    let output = Command::new("npm")
+        .args(["install", "-g", "pnpm"])
+        .output()
+        .map_err(|e| format!("Failed to install pnpm: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Failed to install pnpm: {}", stderr));
+    }
+
+    Ok("pnpm installed successfully".to_string())
+}
+
+#[tauri::command]
+fn check_setup_complete() -> bool {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let flag_path = format!("{}/.chatcode/setup_complete", home);
+    std::path::Path::new(&flag_path).exists()
+}
+
+#[tauri::command]
+fn mark_setup_complete() -> Result<(), String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dir_path = format!("{}/.chatcode", home);
+    let flag_path = format!("{}/setup_complete", dir_path);
+
+    std::fs::create_dir_all(&dir_path)
+        .map_err(|e| format!("Failed to create .chatcode directory: {}", e))?;
+
+    std::fs::write(&flag_path, "1")
+        .map_err(|e| format!("Failed to write setup flag: {}", e))?;
+
+    Ok(())
+}
+
+#[tauri::command]
+fn create_env_file(project_path: String, config: std::collections::HashMap<String, String>) -> Result<(), String> {
+    let env_path = format!("{}/.env", project_path);
+
+    // Read existing .env.example if exists
+    let example_path = format!("{}/.env.example", project_path);
+    let mut content = if let Ok(example) = std::fs::read_to_string(&example_path) {
+        example
+    } else {
+        // Default template
+        r#"# Telegram Bot Token (required)
+TG_BOT_TOKEN=
+
+# Claude Code binary path (required)
+CLAUDE_CODE_PATH=
+
+# Working directory for projects
+WORK_DIR=
+
+# Storage type: redis or memory
+STORAGE_TYPE=memory
+
+# Redis URL (optional, for production)
+# REDIS_URL=redis://localhost:6379
+"#.to_string()
+    };
+
+    // Replace values in template
+    for (key, value) in config {
+        let pattern = format!("{}=", key);
+        let replacement = format!("{}={}", key, value);
+
+        if content.contains(&pattern) {
+            // Replace existing line
+            let lines: Vec<&str> = content.lines().collect();
+            let new_lines: Vec<String> = lines.iter().map(|line| {
+                if line.starts_with(&pattern) || line.starts_with(&format!("# {}", pattern)) {
+                    replacement.clone()
+                } else {
+                    line.to_string()
+                }
+            }).collect();
+            content = new_lines.join("\n");
+        } else {
+            // Append new line
+            content.push_str(&format!("\n{}", replacement));
+        }
+    }
+
+    std::fs::write(&env_path, content)
+        .map_err(|e| format!("Failed to write .env file: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -684,7 +912,14 @@ pub fn run() {
             get_autostart_enabled,
             set_autostart_enabled,
             fetch_metrics,
-            fetch_analytics
+            fetch_analytics,
+            // Setup wizard commands
+            check_prerequisites,
+            install_dependencies,
+            install_pnpm,
+            check_setup_complete,
+            mark_setup_complete,
+            create_env_file
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

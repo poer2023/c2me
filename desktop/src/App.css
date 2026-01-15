@@ -1128,3 +1128,275 @@ body {
   font-size: 12px;
   color: var(--text-tertiary);
 }
+
+/* ============================================
+   Setup Wizard Styles
+   ============================================ */
+
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  gap: var(--space-md);
+  color: var(--text-secondary);
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--glass-border);
+  border-top-color: var(--system-blue);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.wizard-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #667eea22 0%, #764ba222 100%);
+  backdrop-filter: blur(20px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--space-lg);
+}
+
+.wizard-container {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--glass-shadow), var(--glass-inner-glow);
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.wizard-header {
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--glass-border-subtle);
+}
+
+.wizard-header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 0 0 var(--space-lg) 0;
+  text-align: center;
+}
+
+.wizard-steps {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.wizard-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  flex: 1;
+  opacity: 0.4;
+  transition: opacity var(--transition-fast);
+}
+
+.wizard-step.active {
+  opacity: 1;
+}
+
+.wizard-step.completed {
+  opacity: 0.7;
+}
+
+.step-icon {
+  font-size: 20px;
+}
+
+.step-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.wizard-content {
+  flex: 1;
+  padding: var(--space-lg);
+  overflow-y: auto;
+}
+
+.wizard-error {
+  background: rgba(255, 59, 48, 0.15);
+  color: var(--system-red);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-md);
+  font-size: 13px;
+}
+
+.wizard-welcome h2,
+.wizard-prerequisites h2,
+.wizard-config h2,
+.wizard-install h2,
+.wizard-complete h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 var(--space-md) 0;
+}
+
+.wizard-welcome p,
+.wizard-config p,
+.wizard-install p,
+.wizard-complete p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--space-md);
+}
+
+.wizard-welcome ul,
+.wizard-complete ul {
+  list-style: none;
+  padding: 0;
+  margin: var(--space-md) 0;
+}
+
+.wizard-welcome li,
+.wizard-complete li {
+  padding: var(--space-sm) 0;
+  color: var(--text-secondary);
+}
+
+.wizard-complete .tip {
+  background: rgba(0, 122, 255, 0.1);
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+}
+
+/* Prerequisites */
+.prereq-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-lg);
+}
+
+.prereq-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  background: var(--glass-bg-secondary);
+  border-radius: var(--radius-md);
+}
+
+.prereq-item.ok {
+  border-left: 3px solid var(--system-green);
+}
+
+.prereq-item.missing {
+  border-left: 3px solid var(--system-orange);
+}
+
+.prereq-icon {
+  font-size: 20px;
+}
+
+.prereq-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prereq-name {
+  font-weight: 500;
+}
+
+.prereq-version {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+}
+
+/* Wizard Form */
+.wizard-config .form-group {
+  margin-bottom: var(--space-md);
+}
+
+.wizard-config label .required {
+  color: var(--system-red);
+}
+
+/* Install Progress */
+.install-complete {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-xl);
+}
+
+.install-icon {
+  font-size: 48px;
+}
+
+.install-progress {
+  margin-bottom: var(--space-lg);
+}
+
+.progress-bar {
+  height: 8px;
+  background: var(--glass-bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--system-blue), var(--system-green));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-message {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Wizard Footer */
+.wizard-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border-top: 1px solid var(--glass-border-subtle);
+}
+
+.wizard-footer .spacer {
+  flex: 1;
+}
+
+.btn-large {
+  padding: var(--space-md) var(--space-xl) !important;
+  font-size: 15px !important;
+}
+
+.btn-small {
+  padding: var(--space-xs) var(--space-sm) !important;
+  font-size: 12px !important;
+}

@@ -4,6 +4,7 @@ import { listen } from '@tauri-apps/api/event';
 import { LiquidGlassFilters } from './components/LiquidGlassFilters';
 import { MetricsPanel } from './components/MetricsPanel';
 import { UsersPanel } from './components/UsersPanel';
+import { SetupWizard } from './components/SetupWizard';
 import './App.css';
 
 interface BotStatus {
@@ -45,6 +46,7 @@ function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const logsEndRef = useRef<HTMLDivElement>(null);
   const [autostart, setAutostart] = useState<boolean>(false);
+  const [showWizard, setShowWizard] = useState<boolean | null>(null); // null = loading
 
   // Log filtering state
   const [logSearch, setLogSearch] = useState<string>('');
@@ -81,6 +83,10 @@ function App() {
   useEffect(() => {
     invoke<string>('get_project_path').then(setProjectPath);
     invoke<boolean>('get_autostart_enabled').then(setAutostart).catch(() => setAutostart(false));
+    // Check if setup is complete
+    invoke<boolean>('check_setup_complete').then((complete) => {
+      setShowWizard(!complete);
+    }).catch(() => setShowWizard(true));
   }, []);
 
   // Listen for log events
@@ -214,6 +220,18 @@ function App() {
       {/* SVG filters for Liquid Glass refraction effects */}
       <LiquidGlassFilters />
 
+      {/* Setup Wizard */}
+      {showWizard === null ? (
+        <div className="loading-screen">
+          <div className="loading-spinner" />
+          <p>Loading...</p>
+        </div>
+      ) : showWizard ? (
+        <SetupWizard
+          projectPath={projectPath}
+          onComplete={() => setShowWizard(false)}
+        />
+      ) : (
       <div className="container">
       <header className="header">
         <h1>ChatCode Dashboard</h1>
@@ -466,6 +484,7 @@ function App() {
         </div>
       )}
     </div>
+    )}
     </>
   );
 }
