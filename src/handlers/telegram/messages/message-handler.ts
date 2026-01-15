@@ -12,6 +12,8 @@ import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { ProgressManager } from '../../../utils/progress-manager';
 import { incrementCounter, startTiming } from '../../../utils/metrics';
 import { downloadTelegramImage, buildMessageContent, ImageContent } from '../../../utils/image-handler';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export class MessageHandler {
   private telegramSender: TelegramSender;
@@ -169,8 +171,164 @@ export class MessageHandler {
     stopTimer();
   }
 
+  /**
+   * Handle document/file messages from Telegram
+   * Supports text-based files like .txt, .py, .ts, .js, .json, .md, etc.
+   */
+  async handleDocumentMessage(ctx: Context): Promise<void> {
+    if (!ctx.chat || !ctx.message || !('document' in ctx.message)) return;
+    const chatId = ctx.chat.id;
+    const document = ctx.message.document;
+    const caption = ('caption' in ctx.message) ? ctx.message.caption : undefined;
+
+    // Track incoming message
+    incrementCounter('messages_received');
+    const stopTimer = startTiming('message_processing_time');
+
+    const user = await this.storage.getUserSession(chatId);
+    if (!user) {
+      await this.sendHelp(ctx);
+      stopTimer();
+      return;
+    }
+
+    // Only process documents when in session or idle
+    if (user.state !== UserState.InSession && user.state !== UserState.Idle) {
+      await ctx.reply('Please complete your current operation first, then send the file.');
+      stopTimer();
+      return;
+    }
+
+    // Check file size (limit to 10MB)
+    const maxFileSize = 10 * 1024 * 1024; // 10MB
+    if (document.file_size && document.file_size > maxFileSize) {
+      await ctx.reply('File too large. Maximum file size is 10MB.');
+      stopTimer();
+      return;
+    }
+
+    // Check if it's a text-based file
+    const textExtensions = ['.txt', '.py', '.ts', '.js', '.jsx', '.tsx', '.json', '.md', '.yaml', '.yml', '.toml', '.xml', '.html', '.css', '.scss', '.less', '.sql', '.sh', '.bash', '.zsh', '.go', '.rs', '.java', '.kt', '.swift', '.c', '.cpp', '.h', '.hpp', '.rb', '.php', '.lua', '.r', '.scala', '.clj', '.ex', '.exs', '.hs', '.ml', '.vim', '.conf', '.ini', '.env', '.gitignore', '.dockerignore', '.editorconfig'];
+
+    const fileName = document.file_name || 'unknown';
+    const fileExt = path.extname(fileName).toLowerCase();
+
+    if (!textExtensions.includes(fileExt) && document.mime_type && !document.mime_type.startsWith('text/')) {
+      await ctx.reply(`Unsupported file type: ${fileExt}. Only text-based files are supported.`);
+      stopTimer();
+      return;
+    }
+
+    try {
+      // Notify user
+      const processingMsg = await ctx.reply(`📄 Processing file: ${fileName}...`);
+
+      // Download file
+      const fileLink = await this.bot.telegram.getFileLink(document.file_id);
+      const response = await fetch(fileLink.href);
+      const fileContent = await response.text();
+
+      // Delete processing message
+      try {
+        await ctx.deleteMessage(processingMsg.message_id);
+      } catch {
+        // Ignore delete errors
+      }
+
+      // Build message with file content
+      const prompt = caption
+        ? `${caption}\n\nFile: ${fileName}\n\`\`\`\n${fileContent}\n\`\`\``
+        : `Please analyze this file.\n\nFile: ${fileName}\n\`\`\`\n${fileContent}\n\`\`\``;
+
+      // If not in session, start one
+      if (user.state !== UserState.InSession) {
+        const defaultWorkDir = process.env.WORK_DIR || '/tmp/tg-claudecode';
+        if (!fs.existsSync(defaultWorkDir)) {
+          fs.mkdirSync(defaultWorkDir, { recursive: true });
+        }
+        user.projectPath = defaultWorkDir;
+        user.state = UserState.InSession;
+        await this.storage.saveUserSession(user);
+      }
+
+      // Send status message
+      const statusMessage = await ctx.reply(
+        '⏳ Processing (0s)',
+        KeyboardFactory.createCompletionKeyboard()
+      );
+
+      // Start progress tracking
+      if (statusMessage && 'message_id' in statusMessage) {
+        await this.progressManager.startProgress(
+          user.chatId,
+          statusMessage.message_id
+        );
+      }
+
+      // Send to Claude
+      await this.claudeSDK.addMessageToStream(user.chatId, prompt);
+
+    } catch (error) {
+      console.error('Error processing document:', error);
+      await this.progressManager.completeProgress(user.chatId, false);
+      await ctx.reply(
+        `Failed to process file: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+
+    stopTimer();
+  }
+
+  /**
+   * Parse @file references in message text and expand them
+   * @param text - The message text
+   * @param projectPath - The project root path
+   * @returns Expanded message with file contents
+   */
+  async parseFileReferences(text: string, projectPath: string): Promise<string> {
+    // Match @file patterns like @src/main.ts or @./package.json
+    const filePattern = /@([^\s@]+\.[a-zA-Z0-9]+)/g;
+    const matches = text.matchAll(filePattern);
+
+    let expandedText = text;
+    const fileContents: string[] = [];
+
+    for (const match of matches) {
+      const filePath = match[1];
+      if (!filePath) continue;
+
+      const fullPath = path.isAbsolute(filePath)
+        ? filePath
+        : path.join(projectPath, filePath);
+
+      try {
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const fileName = path.basename(fullPath);
+          fileContents.push(`\n\n📄 **${filePath}**:\n\`\`\`\n${content}\n\`\`\``);
+          // Remove the @reference from original text
+          expandedText = expandedText.replace(match[0], `[${fileName}]`);
+        }
+      } catch (error) {
+        console.warn(`Failed to read file ${filePath}:`, error);
+      }
+    }
+
+    if (fileContents.length > 0) {
+      return expandedText + '\n\n---\n**Referenced Files:**' + fileContents.join('');
+    }
+
+    return text;
+  }
+
   async handleSessionInput(ctx: Context, user: UserSessionModel, text: string): Promise<void> {
     try {
+      // Parse @file references and expand them
+      let processedText = text;
+      if (text.includes('@') && user.projectPath) {
+        processedText = await this.parseFileReferences(text, user.projectPath);
+      }
+
       // Send initial status message and get message ID
       const statusMessage = await ctx.reply(
         '⏳ Processing (0s)',
@@ -185,7 +343,7 @@ export class MessageHandler {
         );
       }
 
-      await this.claudeSDK.addMessageToStream(user.chatId, text);
+      await this.claudeSDK.addMessageToStream(user.chatId, processedText);
     } catch (error) {
       // Complete progress tracking on error
       await this.progressManager.completeProgress(user.chatId, false);

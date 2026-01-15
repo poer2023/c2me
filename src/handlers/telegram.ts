@@ -73,6 +73,9 @@ export class TelegramHandler {
     // Connect progress control handler to callback handler
     this.callbackHandler.setProgressControlHandler(this.progressControlHandler);
 
+    // Connect Claude SDK to callback handler for model switching
+    this.callbackHandler.setClaudeManager(this.claudeSDK);
+
     // Set up rate limit notification
     this.messageHandler.getProgressManager().onGlobalRateLimit((chatId, retryAfter) => {
       this.bot.telegram.sendMessage(
@@ -142,11 +145,21 @@ export class TelegramHandler {
     this.bot.command('progress', (ctx) => this.withTracking(ctx, 'progress', () => this.progressControlHandler.handleProgressCommand(ctx)));
     this.bot.command('progressstats', (ctx) => this.withTracking(ctx, 'progressstats', () => this.progressControlHandler.handleProgressStatsCommand(ctx)));
 
+    // Phase 5A: Claude Code aligned commands
+    this.bot.command('compact', (ctx) => this.withTracking(ctx, 'compact', () => this.commandHandler.handleCompact(ctx)));
+    this.bot.command('model', (ctx) => this.withTracking(ctx, 'model', () => this.commandHandler.handleModel(ctx)));
+    this.bot.command('init', (ctx) => this.withTracking(ctx, 'init', () => this.commandHandler.handleInit(ctx)));
+    this.bot.command('review', (ctx) => this.withTracking(ctx, 'review', () => this.commandHandler.handleReview(ctx)));
+    this.bot.command('undo', (ctx) => this.withTracking(ctx, 'undo', () => this.commandHandler.handleUndo(ctx)));
+
     // Text message handler with activity tracking
     this.bot.on(message('text'), (ctx) => this.withTracking(ctx, undefined, () => this.messageHandler.handleTextMessage(ctx)));
 
     // Photo message handler with activity tracking
     this.bot.on(message('photo'), (ctx) => this.withTracking(ctx, 'photo', () => this.messageHandler.handlePhotoMessage(ctx)));
+
+    // Document/file message handler with activity tracking
+    this.bot.on(message('document'), (ctx) => this.withTracking(ctx, 'document', () => this.messageHandler.handleDocumentMessage(ctx)));
 
     this.bot.on('callback_query', (ctx) => this.callbackHandler.handleCallback(ctx));
   }

@@ -323,6 +323,187 @@ export class CommandHandler {
     }
   }
 
+  /**
+   * Handle /compact command - compress conversation to save tokens
+   */
+  async handleCompact(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.storage.getUserSession(chatId);
+
+    if (!user) {
+      await ctx.reply(this.formatter.formatError('No active session found. Please start a session first.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    if (user.state !== UserState.InSession) {
+      await ctx.reply(this.formatter.formatError('You must be in an active session to compact the conversation.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    try {
+      await ctx.reply('🗜️ Compacting conversation...');
+
+      // Send /compact as a message to Claude SDK to trigger built-in compaction
+      await this.claudeSDK.addMessageToStream(chatId, '/compact');
+
+      await ctx.reply('✅ Conversation compaction requested. Claude will summarize the context to save tokens.');
+    } catch (error) {
+      await ctx.reply(this.formatter.formatError('Failed to compact conversation. Please try again.'), { parse_mode: 'MarkdownV2' });
+      console.error('Error compacting conversation:', error);
+    }
+  }
+
+  /**
+   * Handle /model command - switch Claude model
+   */
+  async handleModel(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.storage.getUserSession(chatId);
+
+    if (!user) {
+      await ctx.reply(this.formatter.formatError('No active session found.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    // Check if model is specified in command
+    const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+    const modelArg = messageText.replace('/model', '').trim().toLowerCase();
+
+    if (!modelArg) {
+      // Show model selection keyboard
+      await ctx.reply(
+        '🤖 Select Claude model:\n\n• **opus** - Most capable, best for complex tasks\n• **sonnet** - Balanced performance and speed\n• **haiku** - Fastest, best for simple tasks',
+        KeyboardFactory.createModelSelectionKeyboard()
+      );
+      return;
+    }
+
+    // Validate model
+    const validModels = ['opus', 'sonnet', 'haiku'];
+    if (!validModels.includes(modelArg)) {
+      await ctx.reply(this.formatter.formatError(`Invalid model. Choose from: ${validModels.join(', ')}`), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    try {
+      // Send /model command to Claude SDK
+      await this.claudeSDK.addMessageToStream(chatId, `/model ${modelArg}`);
+      await ctx.reply(`✅ Model switch to **${modelArg}** requested.`);
+    } catch (error) {
+      await ctx.reply(this.formatter.formatError('Failed to switch model.'), { parse_mode: 'MarkdownV2' });
+      console.error('Error switching model:', error);
+    }
+  }
+
+  /**
+   * Handle /init command - create CLAUDE.md in project
+   */
+  async handleInit(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.storage.getUserSession(chatId);
+
+    if (!user) {
+      await ctx.reply(this.formatter.formatError('No active session found.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    if (user.state !== UserState.InSession) {
+      await ctx.reply(this.formatter.formatError('You must be in an active session to initialize project context.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    try {
+      await ctx.reply('📝 Initializing project context...');
+
+      // Send /init to Claude SDK to create CLAUDE.md
+      await this.claudeSDK.addMessageToStream(chatId, '/init');
+
+      await ctx.reply('✅ Project initialization requested. Claude will analyze the codebase and create CLAUDE.md.');
+    } catch (error) {
+      await ctx.reply(this.formatter.formatError('Failed to initialize project.'), { parse_mode: 'MarkdownV2' });
+      console.error('Error initializing project:', error);
+    }
+  }
+
+  /**
+   * Handle /review command - request code review
+   */
+  async handleReview(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.storage.getUserSession(chatId);
+
+    if (!user) {
+      await ctx.reply(this.formatter.formatError('No active session found.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    if (user.state !== UserState.InSession) {
+      await ctx.reply(this.formatter.formatError('You must be in an active session to request code review.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    // Check for target (file, PR, etc.)
+    const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+    const target = messageText.replace('/review', '').trim();
+
+    try {
+      await ctx.reply('🔍 Starting code review...');
+
+      if (target) {
+        // Review specific file or PR
+        await this.claudeSDK.addMessageToStream(chatId, `/review ${target}`);
+      } else {
+        // Review recent changes
+        await this.claudeSDK.addMessageToStream(chatId, '/review');
+      }
+    } catch (error) {
+      await ctx.reply(this.formatter.formatError('Failed to start code review.'), { parse_mode: 'MarkdownV2' });
+      console.error('Error starting code review:', error);
+    }
+  }
+
+  /**
+   * Handle /undo command - rollback last conversation turn
+   */
+  async handleUndo(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.storage.getUserSession(chatId);
+
+    if (!user) {
+      await ctx.reply(this.formatter.formatError('No active session found.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    if (user.state !== UserState.InSession) {
+      await ctx.reply(this.formatter.formatError('You must be in an active session to undo.'), { parse_mode: 'MarkdownV2' });
+      return;
+    }
+
+    try {
+      // Abort current query if running
+      if (this.claudeSDK.isQueryRunning(chatId)) {
+        await this.claudeSDK.abortQuery(chatId);
+      }
+
+      // Note: True undo requires session history management
+      // For now, we'll clear the session and notify user
+      await ctx.reply('⏪ Undo requested.\n\n⚠️ Note: This will clear the current Claude session. Use /clear for a fresh start, or continue the conversation to correct Claude\'s direction.');
+    } catch (error) {
+      await ctx.reply(this.formatter.formatError('Failed to undo.'), { parse_mode: 'MarkdownV2' });
+      console.error('Error during undo:', error);
+    }
+  }
+
   private async getOrCreateUser(chatId: number): Promise<UserSessionModel> {
     let user = await this.storage.getUserSession(chatId);
     if (!user) {

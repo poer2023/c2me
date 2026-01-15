@@ -208,4 +208,49 @@ export class KeyboardFactory {
       ],
     ]);
   }
+
+  /**
+   * Create model selection keyboard
+   */
+  static createModelSelectionKeyboard(): any {
+    return Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🧠 Opus', 'model:opus'),
+        Markup.button.callback('⚡ Sonnet', 'model:sonnet'),
+        Markup.button.callback('🚀 Haiku', 'model:haiku'),
+      ],
+      [
+        Markup.button.callback('❌ Cancel', 'cancel'),
+      ],
+    ]);
+  }
+
+  /**
+   * Create quick permission mode switch keyboard
+   */
+  static createPermissionSwitchKeyboard(currentMode?: string): any {
+    const modes = [
+      { label: '🛡️ Default', callback: 'perm:default', mode: 'default' },
+      { label: '✏️ AcceptEdits', callback: 'perm:acceptedits', mode: 'acceptEdits' },
+      { label: '📋 Plan', callback: 'perm:plan', mode: 'plan' },
+      { label: '⚡ Bypass', callback: 'perm:bypass', mode: 'bypassPermissions' },
+    ];
+
+    return Markup.inlineKeyboard([
+      modes.map(m => Markup.button.callback(
+        currentMode === m.mode ? `[${m.label}]` : m.label,
+        m.callback
+      )),
+    ]);
+  }
+
+  /**
+   * Create completion keyboard with permission switch
+   */
+  static createCompletionWithPermKeyboard(): any {
+    return Markup.keyboard([
+      ['/compact', '/undo', '/abort'],
+      ['/default', '/acceptedits', '/plan', '/bypass']
+    ]).resize();
+  }
 }

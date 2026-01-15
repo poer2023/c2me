@@ -22,6 +22,8 @@ export const MESSAGES = {
 • /auth - 认证（如需要）
 • /abort - 中止当前查询
 • /clear - 清除会话
+• /compact - 压缩对话节省 token
+• /undo - 回退操作
 
 🔧 **权限模式**
 • /default - 标准模式，需要确认权限
@@ -29,8 +31,15 @@ export const MESSAGES = {
 • /plan - 仅分析，不修改文件
 • /bypass - 跳过所有权限确认
 
+🤖 **Claude 功能**
+• /model - 切换 Claude 模型
+• /init - 初始化项目上下文
+• /review - 代码审查
+
 📁 **文件操作**
 • /ls - 浏览项目文件
+• 发送文件 - 直接发送 .txt/.py/.ts 等文件
+• @文件路径 - 在消息中引用文件内容
 
 ℹ️ **信息**
 • /status - 查看当前状态
@@ -152,6 +161,8 @@ Claude 会话：${hasClaudeSession}
 /auth [密码] - 认证（如需要）
 /abort - 中止当前 Claude 查询
 /clear - 清除 Claude 会话
+/compact - 压缩对话节省 token
+/undo - 回退操作
 
 🔧 **权限模式**
 /default - 标准模式，需要确认权限
@@ -159,8 +170,15 @@ Claude 会话：${hasClaudeSession}
 /plan - 仅分析模式，不修改文件
 /bypass - 跳过所有权限确认（安全环境）
 
+🤖 **Claude 功能**
+/model [opus/sonnet/haiku] - 切换 Claude 模型
+/init - 初始化项目上下文 (CLAUDE.md)
+/review [文件/PR] - 代码审查
+
 📁 **文件操作**
 /ls [路径] - 浏览项目文件和目录
+发送文件 - 直接发送 .txt/.py/.ts 等文件
+@文件路径 - 在消息中引用文件内容（如 @src/main.ts）
 
 ℹ️ **信息**
 /status - 查看完整状态信息
@@ -175,6 +193,9 @@ Claude 会话：${hasClaudeSession}
 
 **提示：**
 • 直接发消息即可与 Claude 对话
+• 发送文件可让 Claude 分析代码
+• 使用 @文件路径 快速引用文件内容
+• 使用 /compact 压缩长对话节省 token
 • 使用 /status 查看当前设置`,
 
   // 进度消息

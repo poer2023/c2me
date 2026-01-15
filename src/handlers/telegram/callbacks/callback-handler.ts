@@ -3,12 +3,14 @@ import { IStorage } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { ProjectHandler } from '../project/project-handler';
 import { FileBrowserHandler } from '../file-browser/file-browser-handler';
-import { UserState } from '../../../models/types';
+import { UserState, PermissionMode } from '../../../models/types';
 import { PermissionManager } from '../../permission-manager';
 import { ProgressControlHandler } from '../progress/progress-control-handler';
+import { ClaudeManager } from '../../claude';
 
 export class CallbackHandler {
   private progressControlHandler: ProgressControlHandler | null = null;
+  private claudeSDK: ClaudeManager | null = null;
 
   constructor(
     private formatter: MessageFormatter,
@@ -18,6 +20,13 @@ export class CallbackHandler {
     private bot: Telegraf,
     private permissionManager: PermissionManager
   ) {}
+
+  /**
+   * Set Claude SDK manager for model switching
+   */
+  setClaudeManager(claudeSDK: ClaudeManager): void {
+    this.claudeSDK = claudeSDK;
+  }
 
   /**
    * Set progress control handler (called after initialization)
@@ -56,6 +65,102 @@ export class CallbackHandler {
       await this.handleMCPApprovalCallback(data, chatId, messageId);
     } else if (data?.startsWith('file:') || data?.startsWith('directory:') || data?.startsWith('nav:')) {
       await this.fileBrowserHandler.handleFileBrowsingCallback(data, chatId, messageId);
+    } else if (data?.startsWith('perm:')) {
+      await this.handlePermissionSwitchCallback(data, chatId, messageId);
+    } else if (data?.startsWith('model:')) {
+      await this.handleModelSelectionCallback(data, chatId, messageId);
+    }
+  }
+
+  /**
+   * Handle quick permission mode switch from inline keyboard
+   */
+  private async handlePermissionSwitchCallback(data: string, chatId: number, messageId?: number): Promise<void> {
+    try {
+      const modeStr = data.replace('perm:', '');
+      let mode: PermissionMode;
+
+      switch (modeStr) {
+        case 'default':
+          mode = PermissionMode.Default;
+          break;
+        case 'acceptedits':
+          mode = PermissionMode.AcceptEdits;
+          break;
+        case 'plan':
+          mode = PermissionMode.Plan;
+          break;
+        case 'bypass':
+          mode = PermissionMode.BypassPermissions;
+          break;
+        default:
+          await this.bot.telegram.sendMessage(chatId, 'Invalid permission mode');
+          return;
+      }
+
+      const user = await this.storage.getUserSession(chatId);
+      if (!user) {
+        await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('No session found.'), { parse_mode: 'MarkdownV2' });
+        return;
+      }
+
+      user.setPermissionMode(mode);
+      await this.storage.saveUserSession(user);
+
+      const modeNames: Record<PermissionMode, string> = {
+        [PermissionMode.Default]: '🛡️ Default',
+        [PermissionMode.AcceptEdits]: '✏️ AcceptEdits',
+        [PermissionMode.Plan]: '📋 Plan',
+        [PermissionMode.BypassPermissions]: '⚡ Bypass',
+      };
+
+      // Delete the keyboard message
+      if (messageId) {
+        try {
+          await this.bot.telegram.deleteMessage(chatId, messageId);
+        } catch {
+          // Ignore delete errors
+        }
+      }
+
+      await this.bot.telegram.sendMessage(chatId, `✅ Permission mode changed to: ${modeNames[mode]}`);
+    } catch (error) {
+      console.error('Error handling permission switch:', error);
+      await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Failed to switch permission mode.'), { parse_mode: 'MarkdownV2' });
+    }
+  }
+
+  /**
+   * Handle model selection from inline keyboard
+   */
+  private async handleModelSelectionCallback(data: string, chatId: number, messageId?: number): Promise<void> {
+    try {
+      const model = data.replace('model:', '');
+
+      if (!['opus', 'sonnet', 'haiku'].includes(model)) {
+        await this.bot.telegram.sendMessage(chatId, 'Invalid model selection');
+        return;
+      }
+
+      // Delete the keyboard message
+      if (messageId) {
+        try {
+          await this.bot.telegram.deleteMessage(chatId, messageId);
+        } catch {
+          // Ignore delete errors
+        }
+      }
+
+      // Send model switch command to Claude SDK
+      if (this.claudeSDK) {
+        await this.claudeSDK.addMessageToStream(chatId, `/model ${model}`);
+        await this.bot.telegram.sendMessage(chatId, `🤖 Switching to ${model.toUpperCase()} model...`);
+      } else {
+        await this.bot.telegram.sendMessage(chatId, 'Claude SDK not available for model switching.');
+      }
+    } catch (error) {
+      console.error('Error handling model selection:', error);
+      await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Failed to switch model.'), { parse_mode: 'MarkdownV2' });
     }
   }
 
