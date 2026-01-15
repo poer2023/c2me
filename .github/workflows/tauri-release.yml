@@ -61,6 +61,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: desktop
+          tauriScript: pnpm tauri
           tagName: ${{ github.ref_name }}
           releaseName: 'ChatCode Desktop ${{ github.ref_name }}'
           releaseBody: |
@@ -80,4 +81,6 @@ jobs:
             🤖 Generated with [Claude Code](https://claude.ai/code)
           releaseDraft: false
           prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') || contains(github.ref, '-rc') }}
+          includeRelease: true
+          includeUpdaterJson: false
           args: ${{ matrix.args }}
