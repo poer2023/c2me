@@ -11,6 +11,7 @@ import { TelegramSender } from '../../../services/telegram-sender';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { ProgressManager } from '../../../utils/progress-manager';
 import { incrementCounter, startTiming } from '../../../utils/metrics';
+import { downloadTelegramImage, buildMessageContent, ImageContent } from '../../../utils/image-handler';
 
 export class MessageHandler {
   private telegramSender: TelegramSender;
@@ -64,12 +65,107 @@ export class MessageHandler {
         if (this.github.isGitHubURL(text)) {
           await this.projectHandler.startProjectCreation(ctx, user, text);
         } else {
-          // 无项目模式：直接启动会话
+          // No-project mode: start session directly
           await this.startDirectSession(ctx, user, text);
         }
     }
 
     // Stop message processing timer
+    stopTimer();
+  }
+
+  /**
+   * Handle photo messages from Telegram
+   */
+  async handlePhotoMessage(ctx: Context): Promise<void> {
+    if (!ctx.chat || !ctx.message || !('photo' in ctx.message)) return;
+    const chatId = ctx.chat.id;
+    const photos = ctx.message.photo;
+    const caption = ('caption' in ctx.message) ? ctx.message.caption : undefined;
+
+    // Track incoming message
+    incrementCounter('messages_received');
+    const stopTimer = startTiming('message_processing_time');
+
+    const user = await this.storage.getUserSession(chatId);
+    if (!user) {
+      await this.sendHelp(ctx);
+      stopTimer();
+      return;
+    }
+
+    // Only process photos when in session or idle (to start a new session)
+    if (user.state !== UserState.InSession && user.state !== UserState.Idle) {
+      await ctx.reply('Please complete your current operation first, then send the image.');
+      stopTimer();
+      return;
+    }
+
+    try {
+      // Get the largest photo (last in array)
+      const largestPhoto = photos[photos.length - 1];
+      if (!largestPhoto) {
+        await ctx.reply('No valid photo found in the message.');
+        stopTimer();
+        return;
+      }
+
+      // Notify user that we're processing the image
+      const processingMsg = await ctx.reply('🖼️ Processing image...');
+
+      // Download and convert image to base64
+      const imageContent = await downloadTelegramImage(this.bot, largestPhoto.file_id);
+
+      // Delete processing message
+      try {
+        await ctx.deleteMessage(processingMsg.message_id);
+      } catch {
+        // Ignore delete errors
+      }
+
+      // Build message content with image and optional caption
+      const content = buildMessageContent(
+        caption || 'Please analyze this image.',
+        [imageContent]
+      );
+
+      // If not in session, start one
+      if (user.state !== UserState.InSession) {
+        const defaultWorkDir = process.env.WORK_DIR || '/tmp/tg-claudecode';
+        const fs = await import('fs');
+        if (!fs.existsSync(defaultWorkDir)) {
+          fs.mkdirSync(defaultWorkDir, { recursive: true });
+        }
+        user.projectPath = defaultWorkDir;
+        user.state = UserState.InSession;
+        await this.storage.saveUserSession(user);
+      }
+
+      // Send status message
+      const statusMessage = await ctx.reply(
+        '⏳ Processing (0s)',
+        KeyboardFactory.createCompletionKeyboard()
+      );
+
+      // Start progress tracking
+      if (statusMessage && 'message_id' in statusMessage) {
+        await this.progressManager.startProgress(
+          user.chatId,
+          statusMessage.message_id
+        );
+      }
+
+      // Send to Claude with image content
+      await this.claudeSDK.addMessageWithContent(user.chatId, content);
+
+    } catch (error) {
+      console.error('Error processing photo:', error);
+      await this.progressManager.completeProgress(user.chatId, false);
+      await ctx.reply(
+        `Failed to process image: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
+
     stopTimer();
   }
 

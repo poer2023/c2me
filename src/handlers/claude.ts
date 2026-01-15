@@ -4,6 +4,7 @@ import { TargetTool } from '../models/types';
 import { PermissionManager } from './permission-manager';
 import { StreamManager } from '../utils/stream-manager';
 import { incrementCounter, startTiming, incrementGauge, decrementGauge } from '../utils/metrics';
+import { MessageContent } from '../utils/image-handler';
 
 export class ClaudeManager {
   private storage: IStorage;
@@ -46,6 +47,35 @@ export class ClaudeManager {
             text: prompt
           }
         ]
+      },
+      parent_tool_use_id: null,
+      session_id: ''
+    };
+
+    // If no active query, start a new one
+    if (!this.streamManager.isStreamActive(chatId)) {
+      await this.startNewQuery(chatId, session);
+    }
+
+    // Add message to existing stream
+    this.streamManager.addMessage(chatId, userMessage);
+  }
+
+  /**
+   * Add a message with mixed content (text and/or images) to the stream
+   */
+  async addMessageWithContent(chatId: number, content: MessageContent[]): Promise<void> {
+    const session = await this.storage.getUserSession(chatId);
+    if (!session) {
+      console.error(`[ClaudeManager] No session found for chatId: ${chatId}`);
+      return;
+    }
+
+    const userMessage: SDKUserMessage = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: content as any // SDK accepts this format
       },
       parent_tool_use_id: null,
       session_id: ''

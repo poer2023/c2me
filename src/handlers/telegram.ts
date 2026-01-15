@@ -145,6 +145,9 @@ export class TelegramHandler {
     // Text message handler with activity tracking
     this.bot.on(message('text'), (ctx) => this.withTracking(ctx, undefined, () => this.messageHandler.handleTextMessage(ctx)));
 
+    // Photo message handler with activity tracking
+    this.bot.on(message('photo'), (ctx) => this.withTracking(ctx, 'photo', () => this.messageHandler.handlePhotoMessage(ctx)));
+
     this.bot.on('callback_query', (ctx) => this.callbackHandler.handleCallback(ctx));
   }
 
