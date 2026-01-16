@@ -170,6 +170,7 @@ body.theme-light {
 .container {
   height: 100vh;
   padding: var(--space-lg);
+  padding-top: calc(var(--space-lg) + 28px); /* Extra space for macOS traffic lights */
   position: relative;
   overflow: hidden;
   display: flex;
@@ -191,6 +192,16 @@ body.theme-light {
   margin-bottom: var(--space-lg);
   padding-bottom: var(--space-md);
   border-bottom: 1px solid var(--glass-border-subtle);
+  /* Allow window dragging from header area */
+  -webkit-app-region: drag;
+}
+
+.header button,
+.header input,
+.header select,
+.header a {
+  /* Buttons and interactive elements should not be draggable */
+  -webkit-app-region: no-drag;
 }
 
 .header h1 {
@@ -1670,11 +1681,22 @@ body.theme-light {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-md);
+  /* Make this area draggable for window movement */
+  -webkit-app-region: drag;
+  cursor: default;
+}
+
+.header-row h1 {
+  -webkit-app-region: drag;
+  cursor: default;
+  user-select: none;
 }
 
 .header-actions {
   display: flex;
   gap: var(--space-sm);
+  /* Buttons should not be draggable */
+  -webkit-app-region: no-drag;
 }
 
 .settings-btn {

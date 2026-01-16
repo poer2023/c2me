@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ChatCode",
+  "productName": "c2me",
   "version": "1.4.0",
   "identifier": "com.chatcode.desktop",
   "build": {
@@ -12,13 +12,15 @@
   "app": {
     "windows": [
       {
-        "title": "ChatCode Dashboard",
+        "title": "ChatCode",
         "width": 900,
         "height": 750,
         "resizable": true,
         "fullscreen": false,
         "visible": false,
-        "useHttpsScheme": true
+        "useHttpsScheme": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true
       }
     ],
     "security": {
