@@ -12,6 +12,7 @@ import {
   getDateKey,
   isActiveInLastNDays,
 } from '../models/analytics';
+import { ChatMessage, ChatSummary } from '../models/chat-message';
 
 interface BufferedWrite {
   data: string;
@@ -27,10 +28,15 @@ export class RedisStorage implements IStorage {
   private readonly TOOL_USE_PREFIX = 'tool_use:';
   private readonly USER_ACTIVITY_PREFIX = 'user_activity:';
   private readonly USER_ACTIVITY_LIST_KEY = 'user_activity_list';
+  private readonly CHAT_MESSAGES_PREFIX = 'chat_messages:';
+  private readonly CHAT_SUMMARY_PREFIX = 'chat_summary:';
+  private readonly CHAT_LIST_KEY = 'chat_list';
   private readonly SESSION_TTL = 3 * 60 * 60; // 3 hours in seconds
   private readonly TOOL_USE_TTL = 30 * 60; // 30 minutes in seconds
   private readonly PROJECT_TTL = 15 * 24 * 60 * 60; // 15 days in seconds
   private readonly ACTIVITY_TTL = 90 * 24 * 60 * 60; // 90 days in seconds
+  private readonly MESSAGE_TTL = 7 * 24 * 60 * 60; // 7 days in seconds
+  private readonly MAX_MESSAGES_PER_CHAT = 1000;
 
   // Write buffer configuration
   private writeBuffer: Map<string, BufferedWrite> = new Map();
@@ -469,5 +475,102 @@ export class RedisStorage implements IStorage {
       recentUsers,
       generatedAt: now,
     };
+  }
+
+  // Chat message storage methods (Message Simulator)
+  private getChatMessagesKey(chatId: number): string {
+    return `${this.CHAT_MESSAGES_PREFIX}${chatId}`;
+  }
+
+  private getChatSummaryKey(chatId: number): string {
+    return `${this.CHAT_SUMMARY_PREFIX}${chatId}`;
+  }
+
+  async saveChatMessage(message: ChatMessage): Promise<void> {
+    const chatId = message.chatId;
+    const messagesKey = this.getChatMessagesKey(chatId);
+    const summaryKey = this.getChatSummaryKey(chatId);
+
+    // Add message to sorted set with timestamp as score
+    await this.client.zAdd(messagesKey, {
+      score: message.timestamp,
+      value: JSON.stringify(message),
+    });
+
+    // Trim to keep only the most recent messages (ring buffer behavior)
+    const count = await this.client.zCard(messagesKey);
+    if (count > this.MAX_MESSAGES_PER_CHAT) {
+      await this.client.zRemRangeByRank(messagesKey, 0, count - this.MAX_MESSAGES_PER_CHAT - 1);
+    }
+
+    // Set TTL on messages
+    await this.client.expire(messagesKey, this.MESSAGE_TTL);
+
+    // Update chat summary
+    const existingSummaryJson = await this.client.get(summaryKey);
+    const existingSummary: Partial<ChatSummary> = existingSummaryJson
+      ? JSON.parse(existingSummaryJson)
+      : {};
+
+    const summary: ChatSummary = {
+      chatId,
+      username: message.metadata?.username || existingSummary.username,
+      firstName: message.metadata?.firstName || existingSummary.firstName,
+      lastName: message.metadata?.lastName || existingSummary.lastName,
+      lastMessage: message.content.substring(0, 100),
+      lastMessageTime: message.timestamp,
+      unreadCount: message.direction === 'incoming'
+        ? (existingSummary.unreadCount || 0) + 1
+        : 0,
+    };
+
+    await this.client.set(summaryKey, JSON.stringify(summary), { EX: this.MESSAGE_TTL });
+
+    // Add to chat list for enumeration
+    await this.client.sAdd(this.CHAT_LIST_KEY, chatId.toString());
+  }
+
+  async getChatMessages(chatId: number, limit: number = 50, before?: number): Promise<ChatMessage[]> {
+    const messagesKey = this.getChatMessagesKey(chatId);
+
+    let messageJsons: string[];
+    if (before) {
+      // Get messages before a specific timestamp
+      messageJsons = await this.client.zRangeByScore(
+        messagesKey,
+        '-inf',
+        before - 1,
+        { LIMIT: { offset: 0, count: limit } }
+      );
+    } else {
+      // Get most recent messages
+      messageJsons = await this.client.zRange(
+        messagesKey,
+        -limit,
+        -1
+      );
+    }
+
+    return messageJsons.map(json => JSON.parse(json) as ChatMessage);
+  }
+
+  async getRecentChats(limit: number = 50): Promise<ChatSummary[]> {
+    const chatIds = await this.client.sMembers(this.CHAT_LIST_KEY);
+    const summaries: ChatSummary[] = [];
+
+    for (const chatIdStr of chatIds) {
+      const chatId = parseInt(chatIdStr, 10);
+      const summaryKey = this.getChatSummaryKey(chatId);
+      const summaryJson = await this.client.get(summaryKey);
+
+      if (summaryJson) {
+        summaries.push(JSON.parse(summaryJson) as ChatSummary);
+      }
+    }
+
+    // Sort by last message time, most recent first
+    return summaries
+      .sort((a, b) => b.lastMessageTime - a.lastMessageTime)
+      .slice(0, limit);
   }
 }

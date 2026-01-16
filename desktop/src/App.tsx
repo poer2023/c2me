@@ -8,6 +8,7 @@ import { MetricsPanel } from './components/MetricsPanel';
 import { UsersPanel } from './components/UsersPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { SettingsPage } from './components/SettingsPage';
+import { MessageSimulator } from './components/MessageSimulator';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import './App.css';
 
@@ -45,7 +46,7 @@ function AppContent() {
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
   const [config, setConfig] = useState<Config | null>(null);
-  const [activeTab, setActiveTab] = useState<'status' | 'logs' | 'metrics' | 'users' | 'config'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'messages' | 'logs' | 'metrics' | 'users' | 'config'>('status');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -343,6 +344,12 @@ function AppContent() {
             {t('tab.status')}
           </button>
           <button
+            className={`tab ${activeTab === 'messages' ? 'active' : ''}`}
+            onClick={() => setActiveTab('messages')}
+          >
+            💬 {t('tab.messages')}
+          </button>
+          <button
             className={`tab ${activeTab === 'metrics' ? 'active' : ''}`}
             onClick={() => setActiveTab('metrics')}
           >
@@ -412,6 +419,10 @@ function AppContent() {
             )}
           </div>
         </div>
+      )}
+
+      {activeTab === 'messages' && (
+        <MessageSimulator isRunning={status?.is_running || false} />
       )}
 
       {activeTab === 'metrics' && (

@@ -3,6 +3,7 @@ import { Telegraf } from 'telegraf';
 import { WebhookConfig } from '../config/config';
 import { getMetricsSnapshot, MetricsSnapshot } from '../utils/metrics';
 import { IStorage } from '../storage/interface';
+import { createMessageRoutes } from './message-routes';
 
 export class ExpressServer {
   private app: express.Application;
@@ -21,7 +22,15 @@ export class ExpressServer {
   private setupMiddleware(): void {
     // Parse JSON bodies
     this.app.use(express.json());
-    
+
+    // CORS headers for desktop app
+    this.app.use((_req: Request, res: Response, next: NextFunction) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      next();
+    });
+
     // Security headers
     this.app.use((_req: Request, res: Response, next: NextFunction) => {
       res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -32,6 +41,9 @@ export class ExpressServer {
   }
 
   public setupRoutes(): void {
+    // Message API routes for Message Simulator
+    this.app.use('/api', createMessageRoutes());
+
     // Health check endpoint
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({

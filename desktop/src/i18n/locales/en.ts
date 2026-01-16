@@ -5,6 +5,7 @@ export const en = {
   
   // Tabs
   'tab.status': 'Status',
+  'tab.messages': 'Messages',
   'tab.metrics': 'Metrics',
   'tab.users': 'Users',
   'tab.logs': 'Logs',
@@ -66,6 +67,16 @@ export const en = {
   'msg.autostartDisabled': 'Auto-start disabled',
   'msg.failedAutostart': 'Failed to set auto-start',
   'msg.failedLoadConfig': 'Failed to load config',
+
+  // Message Simulator
+  'messages.title': 'Messages',
+  'messages.noChats': 'No conversations yet',
+  'messages.selectChat': 'Select a conversation to view messages',
+  'messages.noMessages': 'No messages in this conversation',
+  'messages.botOffline': 'Bot is offline. Start the bot to view messages.',
+  'messages.retry': 'Retry',
+  'messages.today': 'Today',
+  'messages.yesterday': 'Yesterday',
 } as const;
 
 export type TranslationKey = keyof typeof en;

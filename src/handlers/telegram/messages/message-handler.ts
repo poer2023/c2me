@@ -12,6 +12,7 @@ import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { ProgressManager } from '../../../utils/progress-manager';
 import { incrementCounter, startTiming } from '../../../utils/metrics';
 import { downloadTelegramImage, buildMessageContent, ImageContent } from '../../../utils/image-handler';
+import { getMessageStore } from '../../../services/message-store';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -47,6 +48,18 @@ export class MessageHandler {
     // Track incoming message
     incrementCounter('messages_received');
     const stopTimer = startTiming('message_processing_time');
+
+    // Capture incoming message for Message Simulator
+    const messageStore = getMessageStore();
+    if (messageStore) {
+      const from = ctx.message.from;
+      await messageStore.captureIncoming(chatId, text, 'text', {
+        username: from?.username,
+        firstName: from?.first_name,
+        lastName: from?.last_name,
+        messageId: ctx.message.message_id,
+      });
+    }
 
     const user = await this.storage.getUserSession(chatId);
     if (!user) {
@@ -96,6 +109,18 @@ export class MessageHandler {
     // Track incoming message
     incrementCounter('messages_received');
     const stopTimer = startTiming('message_processing_time');
+
+    // Capture incoming photo for Message Simulator
+    const messageStore = getMessageStore();
+    if (messageStore) {
+      const from = ctx.message.from;
+      await messageStore.captureIncoming(chatId, caption || '[Photo]', 'photo', {
+        username: from?.username,
+        firstName: from?.first_name,
+        lastName: from?.last_name,
+        messageId: ctx.message.message_id,
+      });
+    }
 
     const user = await this.storage.getUserSession(chatId);
     if (!user) {
@@ -192,6 +217,20 @@ export class MessageHandler {
     // Track incoming message
     incrementCounter('messages_received');
     const stopTimer = startTiming('message_processing_time');
+
+    // Capture incoming document for Message Simulator
+    const messageStore = getMessageStore();
+    if (messageStore) {
+      const from = ctx.message.from;
+      const fileName = document.file_name || 'unknown';
+      await messageStore.captureIncoming(chatId, caption || `[Document: ${fileName}]`, 'document', {
+        username: from?.username,
+        firstName: from?.first_name,
+        lastName: from?.last_name,
+        messageId: ctx.message.message_id,
+        fileName,
+      });
+    }
 
     const user = await this.storage.getUserSession(chatId);
     if (!user) {

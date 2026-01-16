@@ -9,6 +9,7 @@ import { TelegramHandler } from './handlers/telegram';
 import { ExpressServer } from './server/express';
 import { MessageFormatter } from './utils/formatter';
 import { PermissionManager } from './handlers/permission-manager';
+import { initMessageStore } from './services/message-store';
 
 async function main(): Promise<void> {
   try {
@@ -28,7 +29,11 @@ async function main(): Promise<void> {
     const storage = StorageFactory.create(config.storage);
     await storage.initialize();
     console.log(`${config.storage.type} storage initialized`);
-    
+
+    // Initialize Message Store for Message Simulator
+    initMessageStore(storage);
+    console.log('Message store initialized');
+
     const messageFormatter = new MessageFormatter();
     const github = new GitHubManager(config.workDir.workDir);
     const directory = new DirectoryManager();

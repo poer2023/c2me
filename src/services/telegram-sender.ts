@@ -5,6 +5,7 @@ import type { MessageEntity as TelegramMessageEntity }
   from 'telegraf/types';
 import { markdownToTelegramEntities, MessageEntity } from './markdownToTelegramEntities';
 import { incrementCounter, startTiming } from '../utils/metrics';
+import { getMessageStore } from './message-store';
 
 export class TelegramSender {
   constructor(private bot: Telegraf) { }
@@ -12,6 +13,12 @@ export class TelegramSender {
   async safeSendMessage(chatId: number, message: string, options: any = {}): Promise<any> {
     const limit = 4096;
     const stopTimer = startTiming('telegram_send_time');
+
+    // Capture outgoing message for Message Simulator
+    const messageStore = getMessageStore();
+    if (messageStore) {
+      await messageStore.captureOutgoing(chatId, message, 'text');
+    }
 
     let lastMessage: any;
     const parsed = markdownToTelegramEntities(message);

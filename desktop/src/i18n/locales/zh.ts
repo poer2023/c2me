@@ -7,6 +7,7 @@ export const zh: Record<TranslationKey, string> = {
   
   // Tabs
   'tab.status': '状态',
+  'tab.messages': '消息',
   'tab.metrics': '指标',
   'tab.users': '用户',
   'tab.logs': '日志',
@@ -68,4 +69,14 @@ export const zh: Record<TranslationKey, string> = {
   'msg.autostartDisabled': '自启动已关闭',
   'msg.failedAutostart': '设置自启动失败',
   'msg.failedLoadConfig': '加载配置失败',
+
+  // Message Simulator
+  'messages.title': '消息',
+  'messages.noChats': '暂无对话',
+  'messages.selectChat': '选择一个对话来查看消息',
+  'messages.noMessages': '该对话中暂无消息',
+  'messages.botOffline': '机器人已离线，启动机器人以查看消息。',
+  'messages.retry': '重试',
+  'messages.today': '今天',
+  'messages.yesterday': '昨天',
 };

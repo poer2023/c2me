@@ -10,6 +10,7 @@ import {
   getDateKey,
   isActiveInLastNDays,
 } from '../models/analytics';
+import { ChatMessage, ChatSummary } from '../models/chat-message';
 
 export class MemoryStorage implements IStorage {
   private userSessions: Map<number, UserSessionModel> = new Map();
@@ -24,6 +25,11 @@ export class MemoryStorage implements IStorage {
 
   // User analytics storage
   private userActivities: Map<number, UserActivity> = new Map();
+
+  // Chat message storage (ring buffer per chat, max 1000 messages)
+  private chatMessages: Map<number, ChatMessage[]> = new Map();
+  private chatSummaries: Map<number, ChatSummary> = new Map();
+  private readonly MAX_MESSAGES_PER_CHAT = 1000;
 
   async initialize(): Promise<void> {
     console.log('Memory storage initialized');
@@ -236,5 +242,59 @@ export class MemoryStorage implements IStorage {
       recentUsers,
       generatedAt: now,
     };
+  }
+
+  // Chat message storage methods (Message Simulator)
+  async saveChatMessage(message: ChatMessage): Promise<void> {
+    const chatId = message.chatId;
+
+    // Get or create message array for this chat
+    if (!this.chatMessages.has(chatId)) {
+      this.chatMessages.set(chatId, []);
+    }
+
+    const messages = this.chatMessages.get(chatId)!;
+    messages.push(message);
+
+    // Ring buffer: remove oldest messages if exceeding limit
+    if (messages.length > this.MAX_MESSAGES_PER_CHAT) {
+      messages.shift();
+    }
+
+    // Update chat summary
+    const existingSummary = this.chatSummaries.get(chatId);
+    const summary: ChatSummary = {
+      chatId,
+      username: message.metadata?.username || existingSummary?.username,
+      firstName: message.metadata?.firstName || existingSummary?.firstName,
+      lastName: message.metadata?.lastName || existingSummary?.lastName,
+      lastMessage: message.content.substring(0, 100),
+      lastMessageTime: message.timestamp,
+      unreadCount: message.direction === 'incoming'
+        ? (existingSummary?.unreadCount || 0) + 1
+        : 0,
+    };
+    this.chatSummaries.set(chatId, summary);
+  }
+
+  async getChatMessages(chatId: number, limit: number = 50, before?: number): Promise<ChatMessage[]> {
+    const messages = this.chatMessages.get(chatId) || [];
+
+    let filtered = messages;
+    if (before) {
+      filtered = messages.filter(m => m.timestamp < before);
+    }
+
+    // Return last N messages
+    return filtered.slice(-limit);
+  }
+
+  async getRecentChats(limit: number = 50): Promise<ChatSummary[]> {
+    const summaries = Array.from(this.chatSummaries.values());
+
+    // Sort by last message time, most recent first
+    return summaries
+      .sort((a, b) => b.lastMessageTime - a.lastMessageTime)
+      .slice(0, limit);
   }
 }

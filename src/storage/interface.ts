@@ -1,6 +1,7 @@
 import { UserSessionModel } from '../models/user-session';
 import { Project } from '../models/project';
 import { UserActivity, UserActivityUpdate, AnalyticsSnapshot } from '../models/analytics';
+import { ChatMessage, ChatSummary } from '../models/chat-message';
 
 export interface ToolData {
   name: string;
@@ -45,4 +46,9 @@ export interface IStorage {
   getUserActivity(chatId: number): Promise<UserActivity | null>;
   getAllUserActivities(): Promise<UserActivity[]>;
   getAnalyticsSnapshot(): Promise<AnalyticsSnapshot>;
+
+  // Chat message storage (Message Simulator)
+  saveChatMessage(message: ChatMessage): Promise<void>;
+  getChatMessages(chatId: number, limit?: number, before?: number): Promise<ChatMessage[]>;
+  getRecentChats(limit?: number): Promise<ChatSummary[]>;
 }
