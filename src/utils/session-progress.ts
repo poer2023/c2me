@@ -256,7 +256,7 @@ export class SessionProgress {
     }
 
     // Ignore "message can't be edited" error (message was deleted or replaced)
-    if (errorMessage.includes("message can't be edited") || errorMessage.includes("message to edit not found")) {
+    if (errorMessage.includes('message can\'t be edited') || errorMessage.includes('message to edit not found')) {
       // Silently stop trying to edit this message
       this.isActive = false;
       this.stopIntervals();

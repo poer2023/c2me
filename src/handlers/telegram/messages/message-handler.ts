@@ -11,8 +11,9 @@ import { TelegramSender } from '../../../services/telegram-sender';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { ProgressManager } from '../../../utils/progress-manager';
 import { incrementCounter, startTiming } from '../../../utils/metrics';
-import { downloadTelegramImage, buildMessageContent, ImageContent } from '../../../utils/image-handler';
+import { downloadTelegramImage, buildMessageContent } from '../../../utils/image-handler';
 import { getMessageStore } from '../../../services/message-store';
+import { ToolHandler } from '../tools/tool-handler';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -20,6 +21,7 @@ import { exec } from 'child_process';
 export class MessageHandler {
   private telegramSender: TelegramSender;
   private progressManager: ProgressManager;
+  private toolHandler: ToolHandler | null = null;
 
   constructor(
     private storage: IStorage,
@@ -31,6 +33,13 @@ export class MessageHandler {
   ) {
     this.telegramSender = new TelegramSender(bot);
     this.progressManager = new ProgressManager(bot);
+  }
+
+  /**
+   * Set tool handler for aggregation control
+   */
+  setToolHandler(toolHandler: ToolHandler): void {
+    this.toolHandler = toolHandler;
   }
 
   /**
@@ -188,6 +197,11 @@ export class MessageHandler {
           user.chatId,
           statusMessage.message_id
         );
+
+        // Start aggregation session
+        if (this.toolHandler) {
+          this.toolHandler.startAggregation(user.chatId, statusMessage.message_id);
+        }
       }
 
       // Send to Claude with image content
@@ -310,6 +324,11 @@ export class MessageHandler {
           user.chatId,
           statusMessage.message_id
         );
+
+        // Start aggregation session
+        if (this.toolHandler) {
+          this.toolHandler.startAggregation(user.chatId, statusMessage.message_id);
+        }
       }
 
       // Send to Claude
@@ -388,6 +407,11 @@ export class MessageHandler {
           user.chatId,
           statusMessage.message_id
         );
+
+        // Start aggregation session
+        if (this.toolHandler) {
+          this.toolHandler.startAggregation(user.chatId, statusMessage.message_id);
+        }
       }
 
       await this.claudeSDK.addMessageToStream(user.chatId, processedText);
@@ -458,6 +482,11 @@ export class MessageHandler {
           user.chatId,
           statusMessage.message_id
         );
+
+        // Start aggregation session
+        if (this.toolHandler) {
+          this.toolHandler.startAggregation(user.chatId, statusMessage.message_id);
+        }
       }
 
       await this.claudeSDK.addMessageToStream(user.chatId, text);

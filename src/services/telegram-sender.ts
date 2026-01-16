@@ -77,7 +77,7 @@ export class TelegramSender {
   }
 }
 
-const map = {
+const map: Record<string, string> = {
   messageEntityBold: 'bold',
   messageEntityItalic: 'italic',
   messageEntityUnderline: 'underline',
@@ -95,14 +95,15 @@ const map = {
   messageEntityEmail: 'email',
   messageEntityCustomEmoji: 'custom_emoji',
   messageEntityBlockquote: 'blockquote',
-} as const satisfies Record<string, TelegramMessageEntity['type']>;
+  messageEntityExpandableBlockquote: 'expandable_blockquote',
+};
 
 function convert(
   e: MessageEntity,
 ): TelegramMessageEntity | null {
-  const type = map[e.type as keyof typeof map];
+  const type = map[e.type];
   if (!type) return null;
-  const base: TelegramMessageEntity = {
+  const base = {
     type,
     offset: e.offset,
     length: e.length,

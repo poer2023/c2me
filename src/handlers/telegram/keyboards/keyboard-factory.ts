@@ -3,7 +3,43 @@ import { MESSAGES } from '../../../constants/messages';
 import { Project } from '../../../models/project';
 import { ProgressSettings } from '../../../utils/progress-config';
 
+/**
+ * Options for execution control keyboard
+ */
+export interface ExecutionKeyboardOptions {
+  canStop: boolean;
+  canExpand: boolean;
+  sessionId?: string;
+}
+
 export class KeyboardFactory {
+  /**
+   * Create execution control keyboard for aggregated messages
+   */
+  static createExecutionKeyboard(options: ExecutionKeyboardOptions): any {
+    const buttons = [];
+
+    if (options.canStop) {
+      const stopCallback = options.sessionId
+        ? `exec:stop:${options.sessionId}`
+        : 'exec:stop';
+      buttons.push(Markup.button.callback('⏹️ Stop', stopCallback));
+    }
+
+    if (options.canExpand) {
+      const expandCallback = options.sessionId
+        ? `exec:expand:${options.sessionId}`
+        : 'exec:expand';
+      buttons.push(Markup.button.callback('📋 Details', expandCallback));
+    }
+
+    if (buttons.length === 0) {
+      return Markup.inlineKeyboard([]);
+    }
+
+    return Markup.inlineKeyboard([buttons]);
+  }
+
   static createProjectTypeKeyboard(): any {
     return Markup.inlineKeyboard([
       [

@@ -1,12 +1,13 @@
 import { Markup, Telegraf } from 'telegraf';
 import { UserSessionModel } from '../../../models/user-session';
-import { TargetTool, PermissionMode } from '../../../models/types';
+import { TargetTool, PermissionMode, getToolVisibilityLevel } from '../../../models/types';
 import { IStorage, ToolData } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { Config } from '../../../config/config';
 import { TelegramSender } from '../../../services/telegram-sender';
 import { ClaudeManager } from '../../claude';
 import { ProgressManager } from '../../../utils/progress-manager';
+import { MessageAggregator } from '../../../services/message-aggregator';
 
 export interface ToolInfo {
   toolId: string;
@@ -18,6 +19,8 @@ export interface ToolInfo {
 export class ToolHandler {
   private telegramSender: TelegramSender;
   private progressManager: ProgressManager | null = null;
+  private aggregator: MessageAggregator;
+  private useAggregator: boolean = true; // Feature flag for aggregated messages
 
   constructor(
     private storage: IStorage,
@@ -27,6 +30,12 @@ export class ToolHandler {
     private claudeManager?: ClaudeManager
   ) {
     this.telegramSender = new TelegramSender(bot);
+    this.aggregator = new MessageAggregator(bot, {
+      minUpdateInterval: 1500,
+      showLowVisibilitySteps: false,
+      collapseReadOperations: true,
+      maxVisibleSteps: 10,
+    });
   }
 
   /**
@@ -34,6 +43,55 @@ export class ToolHandler {
    */
   setProgressManager(progressManager: ProgressManager): void {
     this.progressManager = progressManager;
+  }
+
+  /**
+   * Enable or disable aggregated message mode
+   */
+  setUseAggregator(enabled: boolean): void {
+    this.useAggregator = enabled;
+  }
+
+  /**
+   * Start aggregation session for a chat
+   */
+  startAggregation(chatId: number, messageId: number): void {
+    if (this.useAggregator) {
+      this.aggregator.startSession(chatId, messageId);
+    }
+  }
+
+  /**
+   * End aggregation session and get completion summary
+   */
+  endAggregation(chatId: number): string {
+    if (this.useAggregator && this.aggregator.hasSession(chatId)) {
+      return this.aggregator.endSession(chatId);
+    }
+    return '';
+  }
+
+  /**
+   * Abort aggregation session
+   */
+  abortAggregation(chatId: number): void {
+    if (this.aggregator.hasSession(chatId)) {
+      this.aggregator.abortSession(chatId);
+    }
+  }
+
+  /**
+   * Check if aggregation is active for a chat
+   */
+  hasActiveAggregation(chatId: number): boolean {
+    return this.aggregator.hasSession(chatId);
+  }
+
+  /**
+   * Get the aggregator instance
+   */
+  getAggregator(): MessageAggregator {
+    return this.aggregator;
   }
 
   async handleToolUse(chatId: number, message: any, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
@@ -44,6 +102,20 @@ export class ToolHandler {
       this.progressManager.updateTool(chatId, toolInfo.toolName, input);
     }
 
+    // If aggregation is active, add step to aggregator
+    if (this.useAggregator && this.aggregator.hasSession(chatId)) {
+      this.aggregator.addStep(chatId, toolInfo.toolName, toolInfo.toolId, input);
+
+      // For high visibility tools with workers enabled, still handle diff specially
+      const visibility = getToolVisibilityLevel(toolInfo.toolName);
+      if (visibility === 'high' && this.config.workers.enabled &&
+          (toolInfo.toolName === TargetTool.Edit || toolInfo.toolName === TargetTool.MultiEdit || toolInfo.toolName === TargetTool.Write)) {
+        await this.handleDiffToolUse(chatId, message, toolInfo, user, parentToolUseId, input);
+      }
+      return;
+    }
+
+    // Fallback to legacy behavior when aggregation is not active
     // Check if this is an Edit, MultiEdit, or Write tool and workers is enabled
     if (this.config.workers.enabled && (toolInfo.toolName === TargetTool.Edit || toolInfo.toolName === TargetTool.MultiEdit || toolInfo.toolName === TargetTool.Write)) {
       await this.handleDiffToolUse(chatId, message, toolInfo, user, parentToolUseId, input);
@@ -56,22 +128,36 @@ export class ToolHandler {
   async handleToolResult(chatId: number, message: any, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
     if (!user.sessionId) return;
 
+    const toolResult = this.extractToolResult(message);
+
+    // If aggregation is active, complete step in aggregator
+    if (this.useAggregator && this.aggregator.hasSession(chatId)) {
+      this.aggregator.completeStep(chatId, toolInfo.toolId, toolResult.content, toolResult.isError);
+
+      // Still handle ExitPlanMode specially
+      if (toolInfo.toolName === TargetTool.ExitPlanMode && !toolResult.isError) {
+        user.setPermissionMode(PermissionMode.Default);
+        await this.storage.saveUserSession(user);
+        await this.abortAndContinue(chatId);
+      }
+      return;
+    }
+
+    // Fallback to legacy behavior
     const storedTool = await this.storage.getToolUse(user.sessionId, toolInfo.toolId);
     if (!storedTool) return;
 
-    const toolResult = this.extractToolResult(message);
-    
     // Special handling for ExitPlanMode
     if (storedTool.name === TargetTool.ExitPlanMode && !toolResult.isError) {
       // Switch permission mode to default
       user.setPermissionMode(PermissionMode.Default);
       await this.storage.saveUserSession(user);
-      
+
       // Abort current request and send continue message
       await this.abortAndContinue(chatId);
       return;
     }
-    
+
     await this.updateToolResultMessage(chatId, storedTool, toolResult, user.sessionId, toolInfo.toolId, parentToolUseId);
   }
 

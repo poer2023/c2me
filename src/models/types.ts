@@ -25,6 +25,30 @@ export enum TargetTool {
   TodoWrite = 'TodoWrite',
 }
 
+/**
+ * Tool visibility classification for message aggregation
+ * Determines how tools are displayed in aggregated messages
+ */
+export const ToolVisibility = {
+  // High visibility - write operations, always show complete steps
+  HIGH: [TargetTool.Edit, TargetTool.MultiEdit, TargetTool.Write, TargetTool.Bash] as TargetTool[],
+
+  // Medium visibility - read operations, show in step counter but collapse details
+  MEDIUM: [TargetTool.Read, TargetTool.Glob, TargetTool.Grep, TargetTool.LS] as TargetTool[],
+
+  // Low visibility - internal operations, only count without individual display
+  LOW: [TargetTool.TodoWrite, TargetTool.Task] as TargetTool[],
+} as const;
+
+/**
+ * Get visibility level of a tool
+ */
+export function getToolVisibilityLevel(toolName: string): 'high' | 'medium' | 'low' {
+  if (ToolVisibility.HIGH.includes(toolName as TargetTool)) return 'high';
+  if (ToolVisibility.MEDIUM.includes(toolName as TargetTool)) return 'medium';
+  return 'low';
+}
+
 export interface Project {
   id: string;
   name: string;

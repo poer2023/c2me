@@ -8,10 +8,12 @@ import { PermissionManager } from '../../permission-manager';
 import { ProgressControlHandler } from '../progress/progress-control-handler';
 import { ClaudeManager } from '../../claude';
 import { incrementCounter } from '../../../utils/metrics';
+import { ToolHandler } from '../tools/tool-handler';
 
 export class CallbackHandler {
   private progressControlHandler: ProgressControlHandler | null = null;
   private claudeSDK: ClaudeManager | null = null;
+  private toolHandler: ToolHandler | null = null;
 
   constructor(
     private formatter: MessageFormatter,
@@ -27,6 +29,13 @@ export class CallbackHandler {
    */
   setClaudeManager(claudeSDK: ClaudeManager): void {
     this.claudeSDK = claudeSDK;
+  }
+
+  /**
+   * Set tool handler for execution control
+   */
+  setToolHandler(toolHandler: ToolHandler): void {
+    this.toolHandler = toolHandler;
   }
 
   /**
@@ -54,6 +63,13 @@ export class CallbackHandler {
       return;
     }
 
+    // Handle execution control callbacks
+    if (data?.startsWith('exec:')) {
+      await this.handleExecutionCallback(data, chatId, messageId);
+      await ctx.answerCbQuery();
+      return;
+    }
+
     await ctx.answerCbQuery();
 
     if (data?.startsWith('project_type_')) {
@@ -70,6 +86,89 @@ export class CallbackHandler {
       await this.handlePermissionSwitchCallback(data, chatId, messageId);
     } else if (data?.startsWith('model:')) {
       await this.handleModelSelectionCallback(data, chatId, messageId);
+    }
+  }
+
+  /**
+   * Handle execution control callbacks (stop, expand)
+   */
+  private async handleExecutionCallback(data: string, chatId: number, messageId?: number): Promise<void> {
+    const parts = data.split(':');
+    const action = parts[1]; // stop or expand
+    // const sessionId = parts[2]; // optional session ID (reserved for future use)
+
+    switch (action) {
+      case 'stop':
+        await this.handleStopExecution(chatId);
+        break;
+      case 'expand':
+        await this.handleExpandDetails(chatId, messageId);
+        break;
+      default:
+        console.warn(`Unknown execution action: ${action}`);
+    }
+  }
+
+  /**
+   * Handle stop execution request
+   */
+  private async handleStopExecution(chatId: number): Promise<void> {
+    try {
+      if (this.claudeSDK) {
+        await this.claudeSDK.abortQuery(chatId);
+        await this.bot.telegram.sendMessage(chatId, '⏹️ Execution stopped');
+      }
+
+      // Also abort aggregation if active
+      if (this.toolHandler) {
+        this.toolHandler.abortAggregation(chatId);
+      }
+    } catch (error) {
+      console.error('Error stopping execution:', error);
+      await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Failed to stop execution'));
+    }
+  }
+
+  /**
+   * Handle expand details request
+   */
+  private async handleExpandDetails(chatId: number, _messageId?: number): Promise<void> {
+    try {
+      if (!this.toolHandler) {
+        await this.bot.telegram.sendMessage(chatId, 'Details not available');
+        return;
+      }
+
+      const aggregator = this.toolHandler.getAggregator();
+      const session = aggregator.getSession(chatId);
+
+      if (!session) {
+        await this.bot.telegram.sendMessage(chatId, 'No active session to expand');
+        return;
+      }
+
+      // Generate detailed view of all steps
+      const lines: string[] = ['📋 **Detailed Steps:**', ''];
+
+      for (let i = 0; i < session.steps.length; i++) {
+        const step = session.steps[i];
+        if (!step) continue;
+
+        const statusIcon = step.status === 'completed' ? '✓' :
+                          step.status === 'error' ? '✗' :
+                          step.status === 'running' ? '○' : '○';
+        const duration = step.duration ? ` (${Math.round(step.duration / 1000)}s)` : '';
+        lines.push(`${i + 1}. ${statusIcon} ${step.summary}${duration}`);
+
+        if (step.details) {
+          lines.push(`   └─ ${step.details}`);
+        }
+      }
+
+      await this.bot.telegram.sendMessage(chatId, lines.join('\n'));
+    } catch (error) {
+      console.error('Error expanding details:', error);
+      await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Failed to expand details'));
     }
   }
 

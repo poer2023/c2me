@@ -23,8 +23,84 @@ export function getUtf16Length(str: string): number {
     return str.length;
 }
 
+// Pre-process spoiler syntax (||text||) before marked parsing
+// Returns the text with spoiler markers removed and tracks their positions
+interface SpoilerInfo {
+    originalStart: number;
+    content: string;
+}
+
+function extractSpoilers(text: string): { cleanedText: string; spoilers: SpoilerInfo[] } {
+    const spoilers: SpoilerInfo[] = [];
+    const spoilerRegex = /\|\|(.+?)\|\|/g;
+    let match;
+
+    // Collect all spoiler matches
+    while ((match = spoilerRegex.exec(text)) !== null) {
+        if (match[1]) {
+            spoilers.push({ originalStart: match.index, content: match[1] });
+        }
+    }
+
+    // Remove spoiler markers (||) from text, keeping the content
+    const cleanedText = text.replace(/\|\|(.+?)\|\|/g, '$1');
+
+    return { cleanedText, spoilers };
+}
+
+// Post-process to add spoiler entities by finding content in plain text
+function addSpoilerEntities(
+    plainText: string,
+    originalText: string,
+    entities: MessageEntity[]
+): void {
+    const spoilerRegex = /\|\|(.+?)\|\|/g;
+    let match;
+
+    // Find each spoiler in the original text
+    while ((match = spoilerRegex.exec(originalText)) !== null) {
+        const spoilerContent = match[1];
+        if (!spoilerContent) continue;
+
+        // Find this content in the plain text
+        // We need to search for the actual text content (may have been transformed by markdown)
+        // For simplicity, search for the literal content
+        let searchStart = 0;
+        let found = plainText.indexOf(spoilerContent, searchStart);
+
+        // Check if this position is already covered by another spoiler entity
+        // to avoid duplicates when same content appears multiple times
+        while (found !== -1) {
+            const existingSpoiler = entities.find(
+                e => e.type === 'messageEntitySpoiler' &&
+                    e.offset === found &&
+                    e.length === spoilerContent.length
+            );
+
+            if (!existingSpoiler) {
+                entities.push({
+                    type: 'messageEntitySpoiler',
+                    offset: found,
+                    length: spoilerContent.length,
+                });
+                break;
+            }
+
+            // Search for next occurrence
+            searchStart = found + 1;
+            found = plainText.indexOf(spoilerContent, searchStart);
+        }
+    }
+}
+
 export function markdownToTelegramEntities(markdownText: string): ParseResult {
-    const tokens = marked.lexer(markdownText, { gfm: true, breaks: true });
+    // Store original text for spoiler processing
+    const originalText = markdownText;
+
+    // Pre-process: remove spoiler markers but keep content for markdown parsing
+    const { cleanedText } = extractSpoilers(markdownText);
+
+    const tokens = marked.lexer(cleanedText, { gfm: true, breaks: true });
 
     let plainText = '';
     const entities: MessageEntity[] = [];
@@ -92,8 +168,12 @@ export function markdownToTelegramEntities(markdownText: string): ParseResult {
                     break;
                 }
                 case 'blockquote': {
-                    entityType = 'messageEntityBlockquote';
                     const bqToken = token as Tokens.Blockquote;
+                    // Check if it's an expandable blockquote (>>> prefix)
+                    const rawText = bqToken.raw || '';
+                    const isExpandable = rawText.startsWith('>>>');
+                    entityType = isExpandable ? 'messageEntityExpandableBlockquote' : 'messageEntityBlockquote';
+
                     if (bqToken.tokens) {
                         const childTokens = bqToken.tokens;
                         childTokens.forEach((childToken: Token, index: number) => {
@@ -121,29 +201,29 @@ export function markdownToTelegramEntities(markdownText: string): ParseResult {
                     }
                     break;
                 }
-                case "list": {
+                case 'list': {
                     const listToken = token as Tokens.List;
 
-                    if (plainText && !plainText.endsWith("\n")) {
-                        plainText += "\n";
+                    if (plainText && !plainText.endsWith('\n')) {
+                        plainText += '\n';
                     }
 
                     const before = plainText.length;
 
                     listToken.items.forEach((item, index) => {
-                        plainText += listToken.ordered ? `${index + 1}. ` : "•  ";
+                        plainText += listToken.ordered ? `${index + 1}. ` : '•  ';
 
                         processTokens(item.tokens);
 
-                        plainText = plainText.replace(/\n+$/, "");
-                        plainText += "\n";
+                        plainText = plainText.replace(/\n+$/, '');
+                        plainText += '\n';
                     });
 
                     if (plainText.length > before) {
-                        plainText = plainText.replace(/\n$/, "\n\n");
+                        plainText = plainText.replace(/\n$/, '\n\n');
                     }
 
-                    plainText = plainText.replace(/\n{3,}/g, "\n\n");
+                    plainText = plainText.replace(/\n{3,}/g, '\n\n');
                     break;
                 }
                 case 'heading':
@@ -201,6 +281,9 @@ export function markdownToTelegramEntities(markdownText: string): ParseResult {
     }
 
     processTokens(tokens); // Pass the top-level TokensList here
+
+    // Post-process: add spoiler entities based on original text markers
+    addSpoilerEntities(plainText, originalText, entities);
 
     return { text: plainText, entities };
 }

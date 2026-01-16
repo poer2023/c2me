@@ -70,11 +70,17 @@ export class TelegramHandler {
     // Connect progress manager to tool handler
     this.toolHandler.setProgressManager(this.messageHandler.getProgressManager());
 
+    // Connect tool handler to message handler for aggregation
+    this.messageHandler.setToolHandler(this.toolHandler);
+
     // Connect progress control handler to callback handler
     this.callbackHandler.setProgressControlHandler(this.progressControlHandler);
 
     // Connect Claude SDK to callback handler for model switching
     this.callbackHandler.setClaudeManager(this.claudeSDK);
+
+    // Connect ToolHandler to callback handler for execution control
+    this.callbackHandler.setToolHandler(this.toolHandler);
 
     // Set up rate limit notification
     this.messageHandler.getProgressManager().onGlobalRateLimit((chatId, retryAfter) => {
@@ -93,8 +99,20 @@ export class TelegramHandler {
 
     // If message is null, this indicates completion
     if (!message) {
+      // End aggregation session and get summary
+      const summary = this.toolHandler.endAggregation(chatId);
+
       // Complete progress tracking
       await this.messageHandler.getProgressManager().completeProgress(chatId, true);
+
+      // Send completion summary if there were aggregated steps
+      if (summary) {
+        try {
+          await this.bot.telegram.sendMessage(chatId, summary);
+        } catch (error) {
+          console.error('Failed to send aggregation summary:', error);
+        }
+      }
       return;
     }
 

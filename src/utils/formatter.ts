@@ -8,6 +8,30 @@ type Edit = { old_string: string; new_string: string; replace_all?: boolean };
 
 export class MessageFormatter {
 
+  /**
+   * Wrap content in expandable blockquote (>>> prefix for each line)
+   */
+  wrapInExpandable(content: string): string {
+    return content.split('\n').map(line => `>>> ${line}`).join('\n');
+  }
+
+  /**
+   * Wrap content in spoiler (||content||)
+   */
+  wrapInSpoiler(content: string): string {
+    // Spoilers don't support newlines well, so we join with spaces for multi-line
+    const singleLine = content.replace(/\n/g, ' ').trim();
+    return `||${singleLine}||`;
+  }
+
+  /**
+   * Format step header with counter [N/M] format
+   */
+  formatStepHeader(current: number, total: number | null, action: string): string {
+    const indicator = total ? `[${current}/${total}]` : `[${current}]`;
+    return `${indicator} ${action}`;
+  }
+
   formatError(message: string): string {
     return `❌ ${format.bold('Error')}: ${format.escape(message)}`;
   }
@@ -74,7 +98,9 @@ export class MessageFormatter {
               result += `${block.text}\n`;
               break;
             case 'thinking':
-              result += `💭 **Thinking process**:\n${block.thinking}\n`;
+              // Wrap thinking blocks in spoiler to reduce clutter
+              const thinkingPreview = block.thinking.slice(0, 100).replace(/\n/g, ' ');
+              result += `||💭 Thinking: ${thinkingPreview}${block.thinking.length > 100 ? '...' : ''}||\n`;
               break;
             case 'tool_use':
               result += await this.formatToolUse(block.name, block.input);
@@ -94,17 +120,14 @@ export class MessageFormatter {
       }
     }
 
-    // Add usage statistics
+    // Add usage statistics (wrapped in spoiler to reduce clutter)
     if (message.message.usage) {
       const usage = message.message.usage;
-      result += `\n📊 **Usage statistics**: Input ${usage.input_tokens} tokens, Output ${usage.output_tokens} tokens`;
+      let usageText = `📊 In: ${usage.input_tokens} Out: ${usage.output_tokens}`;
       if (usage.cache_read_input_tokens) {
-        result += `, Cache read ${usage.cache_read_input_tokens} tokens`;
+        usageText += ` Cache: ${usage.cache_read_input_tokens}`;
       }
-      if (usage.cache_creation_input_tokens) {
-        result += `, Cache creation ${usage.cache_creation_input_tokens} tokens`;
-      }
-      result += '\n';
+      result += `\n||${usageText}||\n`;
     }
 
     // Add stop reason
@@ -180,7 +203,9 @@ export class MessageFormatter {
               }
               break;
             case 'thinking':
-              result += `💭 **Thinking process**:\n${block.thinking}\n`;
+              // Wrap thinking blocks in spoiler to reduce clutter
+              const thinkingPreview = block.thinking.slice(0, 100).replace(/\n/g, ' ');
+              result += `||💭 Thinking: ${thinkingPreview}${block.thinking.length > 100 ? '...' : ''}||\n`;
               break;
             case 'tool_use':
               result += await this.formatToolUse(block.name, block.input);

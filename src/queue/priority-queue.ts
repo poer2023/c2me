@@ -137,7 +137,7 @@ export class PriorityMessageQueue {
           await this.sendMessageCallback(chatId, content, options);
           incrementCounter('messages_sent');
         } catch (error) {
-          console.error(`[PriorityQueue] Failed to send message:`, error);
+          console.error('[PriorityQueue] Failed to send message:', error);
           throw error; // Rethrow to trigger retry
         }
       },
