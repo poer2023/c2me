@@ -1,7 +1,6 @@
-import { useEffect, useState, useRef, useMemo, useCallback, type MouseEvent } from 'react';
-import { invoke, isTauri } from '@tauri-apps/api/core';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import { readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { LiquidGlassFilters } from './components/LiquidGlassFilters';
 import { MetricsPanel } from './components/MetricsPanel';
@@ -291,20 +290,6 @@ function AppContent() {
     setConfig((prev) => (prev ? { ...prev, [key]: value } : null));
   };
 
-  const startWindowDrag = useCallback((event: MouseEvent<HTMLElement>) => {
-    if (!isTauri() || event.button !== 0) {
-      return;
-    }
-
-    const target = event.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea')) {
-      return;
-    }
-
-    event.preventDefault();
-    void getCurrentWindow().startDragging();
-  }, []);
-
   return (
     <>
       {/* SVG filters for Liquid Glass refraction effects */}
@@ -323,7 +308,9 @@ function AppContent() {
         />
       ) : (
       <div className="container">
-      <header className="header" onMouseDown={startWindowDrag}>
+      {/* Transparent drag region for window movement */}
+      <div className="window-drag-region" data-tauri-drag-region />
+      <header className="header">
         <div className="header-row" data-tauri-drag-region>
           <h1 data-tauri-drag-region>{t('app.title')}</h1>
           <div className="header-actions">

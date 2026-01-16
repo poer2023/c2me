@@ -187,21 +187,38 @@ body.theme-light {
   isolation: isolate;
 }
 
+/* Window Drag Region - Transparent overlay for macOS titlebar dragging */
+.window-drag-region {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 52px;
+  z-index: 9999;
+  pointer-events: auto;
+}
+
+/* Ensure header content appears above drag region */
+.header {
+  position: relative;
+  z-index: 10000;
+}
+
+/* Interactive elements in header must be above drag region */
+.header button,
+.header input,
+.header select,
+.header a,
+.tabs {
+  position: relative;
+  z-index: 10001;
+}
+
 /* Header Section */
 .header {
   margin-bottom: var(--space-lg);
   padding-bottom: var(--space-md);
   border-bottom: 1px solid var(--glass-border-subtle);
-  /* Allow window dragging from header area */
-  -webkit-app-region: drag;
-}
-
-.header button,
-.header input,
-.header select,
-.header a {
-  /* Buttons and interactive elements should not be draggable */
-  -webkit-app-region: no-drag;
 }
 
 .header h1 {
@@ -1681,22 +1698,15 @@ body.theme-light {
   justify-content: space-between;
   align-items: center;
   margin-bottom: var(--space-md);
-  /* Make this area draggable for window movement */
-  -webkit-app-region: drag;
-  cursor: default;
 }
 
 .header-row h1 {
-  -webkit-app-region: drag;
-  cursor: default;
   user-select: none;
 }
 
 .header-actions {
   display: flex;
   gap: var(--space-sm);
-  /* Buttons should not be draggable */
-  -webkit-app-region: no-drag;
 }
 
 .settings-btn {
