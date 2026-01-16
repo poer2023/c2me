@@ -73,6 +73,20 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const fetchMetrics = async () => {
+    if (!isRunning) return;
+    setLoading(true);
+    try {
+      const data = await invoke<BotMetrics>('fetch_metrics');
+      setMetrics(data);
+      setError(null);
+    } catch (err) {
+      // Silently handle connection errors when bot just started
+      setError(null);
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     // Don't fetch if bot is not running
     if (!isRunning) {
@@ -80,19 +94,6 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
       setError(null);
       return;
     }
-
-    const fetchMetrics = async () => {
-      setLoading(true);
-      try {
-        const data = await invoke<BotMetrics>('fetch_metrics');
-        setMetrics(data);
-        setError(null);
-      } catch (err) {
-        // Silently handle connection errors when bot just started
-        setError(null);
-      }
-      setLoading(false);
-    };
 
     fetchMetrics();
     const interval = setInterval(fetchMetrics, 5000); // Refresh every 5 seconds

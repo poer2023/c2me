@@ -64,6 +64,25 @@ export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  const fetchAnalytics = async () => {
+    if (!isRunning) return;
+    setLoading(true);
+    try {
+      const data = await invoke<AnalyticsSnapshot>('fetch_analytics');
+      setAnalytics(data);
+      setError(null);
+    } catch (err) {
+      // Show friendly error message instead of technical details
+      const errStr = `${err}`;
+      if (errStr.includes('error sending request') || errStr.includes('connection')) {
+        setError('正在连接机器人服务...');
+      } else {
+        setError('获取数据失败，请稍后重试');
+      }
+    }
+    setLoading(false);
+  };
+
   useEffect(() => {
     // Don't fetch if bot is not running
     if (!isRunning) {
@@ -71,28 +90,6 @@ export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
       setError(null);
       return;
     }
-
-    const fetchAnalytics = async () => {
-      setLoading(true);
-      try {
-        const data = await invoke<AnalyticsSnapshot>('fetch_analytics');
-        setAnalytics(data);
-        setError(null);
-      } catch (err) {
-        // Show friendly error message instead of technical details
-        const errStr = `${err}`;
-        if (errStr.includes('error sending request') || errStr.includes('connection')) {
-          setError('正在连接机器人服务...');
-        } else {
-          setError('获取数据失败，请稍后重试');
-        }
-        // Keep previous analytics data if available
-        if (!analytics) {
-          setAnalytics(null);
-        }
-      }
-      setLoading(false);
-    };
 
     fetchAnalytics();
     const interval = setInterval(fetchAnalytics, 10000); // Refresh every 10 seconds
