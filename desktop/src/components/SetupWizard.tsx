@@ -41,9 +41,12 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
     STORAGE_TYPE: 'memory',
   });
 
-  // Check prerequisites on mount
+  // Check prerequisites on mount (with delay to ensure Tauri is ready)
   useEffect(() => {
-    checkPrerequisites();
+    const timer = setTimeout(() => {
+      checkPrerequisites();
+    }, 500);
+    return () => clearTimeout(timer);
   }, [projectPath]);
 
   // Listen for install progress events
@@ -58,7 +61,15 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
   }, []);
 
   const checkPrerequisites = async () => {
+    // Check if Tauri API is available
+    if (typeof invoke !== 'function') {
+      setError('Tauri API not ready. Please wait...');
+      setTimeout(checkPrerequisites, 1000);
+      return;
+    }
+    
     setLoading(true);
+    setError(null);
     try {
       const status = await invoke<PrerequisiteStatus>('check_prerequisites', { projectPath });
       setPrerequisites(status);
@@ -417,6 +428,16 @@ export function SetupWizard({ projectPath, onComplete }: SetupWizardProps) {
           {step > 0 && step < 4 && (
             <button className="btn btn-secondary" onClick={() => setStep(step - 1)}>
               Back
+            </button>
+          )}
+          {step < 4 && (
+            <button 
+              className="btn btn-secondary btn-skip" 
+              onClick={completeSetup}
+              disabled={loading}
+              title="Skip setup and configure later"
+            >
+              Skip Setup
             </button>
           )}
           <div className="spacer" />

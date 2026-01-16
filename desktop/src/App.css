@@ -110,6 +110,10 @@ html {
   scroll-behavior: smooth;
 }
 
+html, body {
+  overflow: hidden; /* Prevent outer scrollbar - only inner content scrolls */
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
   font-feature-settings: 'kern' 1, 'liga' 1;
@@ -117,7 +121,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
   color: var(--text-primary);
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
 
   /* macOS-style subtle gradient background */
   background:
@@ -161,11 +166,14 @@ body.theme-light {
   background-attachment: fixed;
 }
 
-/* Main Container - Full window, no margins */
+/* Main Container - Full window, no margins, no outer scroll */
 .container {
-  min-height: 100vh;
+  height: 100vh;
   padding: var(--space-lg);
   position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 
   /* Apply SVG refraction filter + blur + saturation */
   backdrop-filter: url(#liquid-refraction) blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -273,6 +281,8 @@ body.theme-light {
   padding: var(--space-lg);
   border: 1px solid var(--glass-border);
   position: relative;
+  flex: 1;
+  overflow: auto;
 }
 
 .status-indicator {
@@ -386,8 +396,9 @@ body.theme-light {
   border: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 180px);
-  min-height: 400px;
+  flex: 1;
+  min-height: 0; /* Important for flex child to allow shrinking */
+  overflow: hidden;
 }
 
 .logs-header {
@@ -509,6 +520,8 @@ body.theme-light {
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
   border: 1px solid var(--glass-border);
+  flex: 1;
+  overflow: auto;
 }
 
 .form-group {
@@ -707,6 +720,8 @@ body.theme-light {
   border-radius: var(--radius-lg);
   padding: var(--space-lg);
   border: 1px solid var(--glass-border);
+  flex: 1;
+  overflow: auto;
 }
 
 .metrics-empty,
@@ -725,6 +740,19 @@ body.theme-light {
 .metrics-empty-icon,
 .metrics-error-icon {
   font-size: 48px;
+  margin-bottom: var(--space-sm);
+}
+
+.metrics-empty-hint,
+.users-empty-hint,
+.users-loading-hint {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-md);
+}
+
+.users-loading-icon {
+  font-size: 32px;
   margin-bottom: var(--space-sm);
 }
 
@@ -931,6 +959,8 @@ body.theme-light {
   flex-direction: column;
   gap: var(--space-lg);
   padding: var(--space-md);
+  flex: 1;
+  overflow: auto;
 }
 
 .users-empty,
@@ -1452,6 +1482,15 @@ body.theme-light {
 .btn-small {
   padding: var(--space-xs) var(--space-sm) !important;
   font-size: 12px !important;
+}
+
+.btn-skip {
+  opacity: 0.7;
+  font-size: 12px !important;
+}
+
+.btn-skip:hover {
+  opacity: 1;
 }
 
 /* Input with toggle (password visibility) */

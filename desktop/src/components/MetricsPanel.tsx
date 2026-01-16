@@ -73,28 +73,27 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const fetchMetrics = async () => {
+  useEffect(() => {
+    // Don't fetch if bot is not running
     if (!isRunning) {
       setMetrics(null);
       setError(null);
       return;
     }
 
-    setLoading(true);
-    try {
-      const data = await invoke<BotMetrics>('fetch_metrics');
-      setMetrics(data);
-      setError(null);
-    } catch (err) {
-      // Silently handle connection errors when bot just started
-      if (!metrics) {
+    const fetchMetrics = async () => {
+      setLoading(true);
+      try {
+        const data = await invoke<BotMetrics>('fetch_metrics');
+        setMetrics(data);
+        setError(null);
+      } catch (err) {
+        // Silently handle connection errors when bot just started
         setError(null);
       }
-    }
-    setLoading(false);
-  };
+      setLoading(false);
+    };
 
-  useEffect(() => {
     fetchMetrics();
     const interval = setInterval(fetchMetrics, 5000); // Refresh every 5 seconds
     return () => clearInterval(interval);
@@ -105,10 +104,11 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
       <div className="metrics-panel">
         <div className="metrics-empty">
           <span className="metrics-empty-icon">📊</span>
-          <p>Bot is not running</p>
+          <p>机器人未运行</p>
+          <p className="metrics-empty-hint">启动机器人后可查看性能指标</p>
           {onStartBot && (
             <button className="btn btn-primary" onClick={onStartBot}>
-              Start Bot
+              启动机器人
             </button>
           )}
         </div>

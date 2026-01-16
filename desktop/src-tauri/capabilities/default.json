@@ -10,7 +10,20 @@
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:webview:allow-webview-close",
-    "core:webview:allow-set-webview-focus"
+    "core:webview:allow-set-webview-focus",
+    "log:default",
+    {
+      "identifier": "fs:allow-read-text-file",
+      "allow": [{ "path": "$APPLOG/**" }]
+    },
+    {
+      "identifier": "fs:allow-read-text-file-lines",
+      "allow": [{ "path": "$APPLOG/**" }]
+    },
+    {
+      "identifier": "fs:allow-read-dir",
+      "allow": [{ "path": "$APPLOG" }]
+    }
   ],
   "webview": {
     "csp": null

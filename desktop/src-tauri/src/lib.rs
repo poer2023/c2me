@@ -12,6 +12,16 @@ use tauri::{
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use tauri_plugin_notification::NotificationExt;
+use log::{info, warn, error};
+
+// Get or create a shared HTTP client for metrics/analytics requests
+fn get_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(Duration::from_millis(500))  // Fast timeout - bot is local
+        .connect_timeout(Duration::from_millis(200))
+        .build()
+        .expect("Failed to create HTTP client")
+}
 
 // Helper function to send system notification
 fn send_notification(app: &AppHandle, title: &str, body: &str) {
@@ -143,37 +153,27 @@ fn start_bot_internal(
 
     let pid = child.id();
 
-    // Capture stdout and stream to frontend
+    // Capture stdout and write to log file (no high-frequency emit)
     if let Some(stdout) = child.stdout.take() {
-        let app_clone = app.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    let log = LogEntry {
-                        level: "info".to_string(),
-                        message: line,
-                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                    };
-                    let _ = app_clone.emit("bot-log", log);
+                    // Write to log file via log plugin (not emit)
+                    info!(target: "bot", "{}", line);
                 }
             }
         });
     }
 
-    // Capture stderr and stream to frontend
+    // Capture stderr and write to log file (no high-frequency emit)
     if let Some(stderr) = child.stderr.take() {
-        let app_clone = app.clone();
         thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 if let Ok(line) = line {
-                    let log = LogEntry {
-                        level: "error".to_string(),
-                        message: line,
-                        timestamp: chrono::Local::now().format("%H:%M:%S").to_string(),
-                    };
-                    let _ = app_clone.emit("bot-log", log);
+                    // Write to log file via log plugin (not emit)
+                    error!(target: "bot", "{}", line);
                 }
             }
         });
@@ -358,40 +358,33 @@ pub struct AnalyticsSnapshot {
 }
 
 #[tauri::command]
-fn fetch_analytics() -> Result<serde_json::Value, String> {
-    // Fetch analytics from the bot's HTTP endpoint
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
+async fn fetch_analytics() -> Result<serde_json::Value, String> {
+    // Use shared HTTP client with fast timeout (async to not block UI)
+    let client = get_http_client();
     let response = client
         .get("http://localhost:3002/analytics")
         .send()
+        .await
         .map_err(|e| format!("Failed to fetch analytics: {}", e))?;
 
     if !response.status().is_success() {
         return Err(format!("Analytics endpoint returned status: {}", response.status()));
     }
 
-    let analytics: serde_json::Value = response
-        .json()
-        .map_err(|e| format!("Failed to parse analytics JSON: {}", e))?;
-
-    Ok(analytics)
+    response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Failed to parse analytics JSON: {}", e))
 }
 
 #[tauri::command]
-fn fetch_metrics() -> Result<BotMetrics, String> {
-    // Fetch metrics from the bot's HTTP endpoint
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(2))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
+async fn fetch_metrics() -> Result<BotMetrics, String> {
+    // Use shared HTTP client with fast timeout (async to not block UI)
+    let client = get_http_client();
     let response = client
         .get("http://localhost:3002/metrics")
         .send()
+        .await
         .map_err(|e| format!("Failed to fetch metrics: {}", e))?;
 
     if !response.status().is_success() {
@@ -400,6 +393,7 @@ fn fetch_metrics() -> Result<BotMetrics, String> {
 
     let metrics: serde_json::Value = response
         .json()
+        .await
         .map_err(|e| format!("Failed to parse metrics JSON: {}", e))?;
 
     Ok(BotMetrics {
@@ -782,6 +776,17 @@ pub fn run() {
             Some(vec!["--minimized"]),
         ))
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        // Log plugin: writes to file, no high-frequency emit
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .target(tauri_plugin_log::Target::new(
+                    tauri_plugin_log::TargetKind::LogDir { file_name: Some("bot.log".into()) },
+                ))
+                .level(log::LevelFilter::Info)
+                .build(),
+        )
+        // FS plugin: for reading log files from frontend
+        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             // When a second instance is launched, show the dashboard window
             if let Some(window) = app.get_webview_window("main") {

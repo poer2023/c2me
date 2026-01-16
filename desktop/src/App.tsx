@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import { LiquidGlassFilters } from './components/LiquidGlassFilters';
 import { MetricsPanel } from './components/MetricsPanel';
 import { UsersPanel } from './components/UsersPanel';
@@ -53,6 +54,7 @@ function AppContent() {
   const [showToken, setShowToken] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [userStoppedBot, setUserStoppedBot] = useState(false); // Track if user manually stopped
 
   // Log filtering state
   const [logSearch, setLogSearch] = useState<string>('');
@@ -95,8 +97,11 @@ function AppContent() {
     }).catch(() => setShowWizard(true));
   }, []);
 
-  // Auto-start bot when setup is complete and bot is not running
+  // Auto-start bot when setup is complete and bot is not running (only on initial load)
   useEffect(() => {
+    // Don't auto-start if user manually stopped the bot
+    if (userStoppedBot) return;
+    
     if (showWizard === false && projectPath && status && !status.is_running) {
       // Small delay to ensure everything is initialized
       const timer = setTimeout(() => {
@@ -106,18 +111,54 @@ function AppContent() {
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [showWizard, projectPath, status?.is_running]);
+  }, [showWizard, projectPath, status?.is_running, userStoppedBot]);
 
-  // Listen for log events
-  useEffect(() => {
-    const unlisten = listen<LogEntry>('bot-log', (event) => {
-      setLogs((prev) => [...prev.slice(-499), event.payload]); // Keep last 500 logs
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
+  // Read logs from file (best practice 2026: file-based logging, no emit storm)
+  const readLogsFromFile = useCallback(async () => {
+    try {
+      const content = await readTextFile('bot.log', { baseDir: BaseDirectory.AppLog });
+      const lines = content.split('\n').filter(line => line.trim());
+      
+      // Parse log lines into LogEntry format
+      const newLogs: LogEntry[] = lines.slice(-500).map(line => {
+        // Log format: [TIMESTAMP LEVEL target] message
+        const match = line.match(/^\[(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})[^\]]*\]\[(\w+)\]/);
+        if (match) {
+          const [, , time, level] = match;
+          const message = line.replace(/^\[[^\]]+\]\[\w+\]\s*/, '').trim();
+          return {
+            level: level.toLowerCase(),
+            message: message || line,
+            timestamp: time,
+          };
+        }
+        // Fallback for non-standard format
+        return {
+          level: line.toLowerCase().includes('error') ? 'error' : 'info',
+          message: line,
+          timestamp: new Date().toLocaleTimeString(),
+        };
+      });
+      
+      setLogs(newLogs);
+    } catch (error) {
+      // File might not exist yet, that's ok
+      console.log('Log file not ready:', error);
+    }
   }, []);
+
+  // Read logs only when logs tab is active (polling from file)
+  useEffect(() => {
+    if (activeTab !== 'logs') return;
+
+    // Read immediately when switching to logs tab
+    readLogsFromFile();
+
+    // Poll for new logs every 2 seconds (much lighter than emit)
+    const pollInterval = setInterval(readLogsFromFile, 2000);
+
+    return () => clearInterval(pollInterval);
+  }, [activeTab, readLogsFromFile]);
 
   // Listen for menu events (from native macOS menu bar)
   useEffect(() => {
@@ -150,6 +191,7 @@ function AppContent() {
   }, [logs, activeTab]);
 
   // Poll status every second
+  // Poll status every 2 seconds (reduced from 1s to improve performance)
   useEffect(() => {
     const interval = setInterval(async () => {
       try {
@@ -158,7 +200,7 @@ function AppContent() {
       } catch (error) {
         console.error('Failed to get bot status:', error);
       }
-    }, 1000);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, []);
@@ -175,7 +217,18 @@ function AppContent() {
       const cfg = await invoke<Config>('load_config', { projectPath });
       setConfig(cfg);
     } catch (error) {
-      showMessage('error', `Failed to load config: ${error}`);
+      // If .env doesn't exist, show empty config form instead of error
+      console.warn('Failed to load config:', error);
+      setConfig({
+        TG_BOT_TOKEN: '',
+        CLAUDE_CODE_PATH: '',
+        ANTHROPIC_API_KEY: '',
+        ANTHROPIC_BASE_URL: '',
+        WORK_DIR: '',
+        STORAGE_TYPE: 'memory',
+        REDIS_URL: '',
+        LOG_LEVEL: 'info',
+      });
     }
   };
 
@@ -194,6 +247,7 @@ function AppContent() {
 
   const startBot = async () => {
     setLoading(true);
+    setUserStoppedBot(false); // Reset the flag when user manually starts
     try {
       const result = await invoke<string>('start_bot', { projectPath });
       showMessage('success', result);
@@ -205,6 +259,7 @@ function AppContent() {
 
   const stopBot = async () => {
     setLoading(true);
+    setUserStoppedBot(true); // Mark that user manually stopped
     try {
       const result = await invoke<string>('stop_bot');
       showMessage('success', result);
@@ -345,11 +400,11 @@ function AppContent() {
       )}
 
       {activeTab === 'metrics' && (
-        <MetricsPanel isRunning={status?.is_running || false} />
+        <MetricsPanel isRunning={status?.is_running || false} onStartBot={startBot} />
       )}
 
       {activeTab === 'users' && (
-        <UsersPanel isRunning={status?.is_running || false} />
+        <UsersPanel isRunning={status?.is_running || false} onStartBot={startBot} />
       )}
 
       {activeTab === 'logs' && (

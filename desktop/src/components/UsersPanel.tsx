@@ -31,6 +31,7 @@ interface AnalyticsSnapshot {
 
 interface UsersPanelProps {
   isRunning: boolean;
+  onStartBot?: () => void;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -57,32 +58,42 @@ function formatUserName(user: UserActivitySummary): string {
   return `User ${user.chatId}`;
 }
 
-export function UsersPanel({ isRunning }: UsersPanelProps) {
+export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
   const [analytics, setAnalytics] = useState<AnalyticsSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchAnalytics = async () => {
+  useEffect(() => {
+    // Don't fetch if bot is not running
     if (!isRunning) {
       setAnalytics(null);
-      setError('Bot is not running');
+      setError(null);
       return;
     }
 
-    setLoading(true);
-    try {
-      const data = await invoke<AnalyticsSnapshot>('fetch_analytics');
-      setAnalytics(data);
-      setError(null);
-    } catch (err) {
-      setError(`${err}`);
-      setAnalytics(null);
-    }
-    setLoading(false);
-  };
+    const fetchAnalytics = async () => {
+      setLoading(true);
+      try {
+        const data = await invoke<AnalyticsSnapshot>('fetch_analytics');
+        setAnalytics(data);
+        setError(null);
+      } catch (err) {
+        // Show friendly error message instead of technical details
+        const errStr = `${err}`;
+        if (errStr.includes('error sending request') || errStr.includes('connection')) {
+          setError('正在连接机器人服务...');
+        } else {
+          setError('获取数据失败，请稍后重试');
+        }
+        // Keep previous analytics data if available
+        if (!analytics) {
+          setAnalytics(null);
+        }
+      }
+      setLoading(false);
+    };
 
-  useEffect(() => {
     fetchAnalytics();
     const interval = setInterval(fetchAnalytics, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
@@ -105,7 +116,13 @@ export function UsersPanel({ isRunning }: UsersPanelProps) {
       <div className="users-panel">
         <div className="users-empty">
           <span className="users-empty-icon">👥</span>
-          <p>Start the bot to view user analytics</p>
+          <p>机器人未运行</p>
+          <p className="users-empty-hint">启动机器人后可查看用户统计数据</p>
+          {onStartBot && (
+            <button className="btn btn-primary" onClick={onStartBot}>
+              启动机器人
+            </button>
+          )}
         </div>
       </div>
     );
@@ -122,12 +139,10 @@ export function UsersPanel({ isRunning }: UsersPanelProps) {
   if (error && !analytics) {
     return (
       <div className="users-panel">
-        <div className="users-error">
-          <span className="users-error-icon">⚠️</span>
+        <div className="users-loading">
+          <span className="users-loading-icon">⏳</span>
           <p>{error}</p>
-          <button className="btn btn-secondary btn-small" onClick={fetchAnalytics}>
-            Retry
-          </button>
+          <p className="users-loading-hint">将在几秒后自动重试...</p>
         </div>
       </div>
     );
