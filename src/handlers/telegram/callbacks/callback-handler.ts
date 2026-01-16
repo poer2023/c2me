@@ -7,6 +7,7 @@ import { UserState, PermissionMode } from '../../../models/types';
 import { PermissionManager } from '../../permission-manager';
 import { ProgressControlHandler } from '../progress/progress-control-handler';
 import { ClaudeManager } from '../../claude';
+import { incrementCounter } from '../../../utils/metrics';
 
 export class CallbackHandler {
   private progressControlHandler: ProgressControlHandler | null = null;
@@ -169,6 +170,14 @@ export class CallbackHandler {
       await this.permissionManager.handleApprovalCallback(chatId, data);
 
       const isApproved = data.startsWith('approve_');
+      
+      // Track tool approval/rejection metrics
+      if (isApproved) {
+        incrementCounter('tool_approvals');
+      } else {
+        incrementCounter('tool_rejections');
+      }
+      
       const message = isApproved ? '✅ Operation approved' : '❌ Operation denied';
       await this.bot.telegram.sendMessage(chatId, message);
 

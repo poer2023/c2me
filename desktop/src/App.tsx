@@ -5,6 +5,8 @@ import { LiquidGlassFilters } from './components/LiquidGlassFilters';
 import { MetricsPanel } from './components/MetricsPanel';
 import { UsersPanel } from './components/UsersPanel';
 import { SetupWizard } from './components/SetupWizard';
+import { SettingsPage } from './components/SettingsPage';
+import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import './App.css';
 
 interface BotStatus {
@@ -36,7 +38,8 @@ function formatUptime(seconds: number): string {
   return `${secs}s`;
 }
 
-function App() {
+function AppContent() {
+  const { t } = useSettings();
   const [status, setStatus] = useState<BotStatus | null>(null);
   const [projectPath, setProjectPath] = useState<string>('');
   const [config, setConfig] = useState<Config | null>(null);
@@ -49,6 +52,7 @@ function App() {
   const [showWizard, setShowWizard] = useState<boolean | null>(null); // null = loading
   const [showToken, setShowToken] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Log filtering state
   const [logSearch, setLogSearch] = useState<string>('');
@@ -249,37 +253,48 @@ function App() {
       ) : (
       <div className="container">
       <header className="header">
-        <h1>ChatCode Dashboard</h1>
+        <div className="header-row">
+          <h1>{t('app.title')}</h1>
+          <div className="header-actions">
+            <button 
+              className="settings-btn" 
+              onClick={() => setShowSettings(true)}
+              title={t('settings.title')}
+            >
+              ⚙️
+            </button>
+          </div>
+        </div>
         <div className="tabs">
           <button
             className={`tab ${activeTab === 'status' ? 'active' : ''}`}
             onClick={() => setActiveTab('status')}
           >
-            Status
+            {t('tab.status')}
           </button>
           <button
             className={`tab ${activeTab === 'metrics' ? 'active' : ''}`}
             onClick={() => setActiveTab('metrics')}
           >
-            Metrics
+            {t('tab.metrics')}
           </button>
           <button
             className={`tab ${activeTab === 'users' ? 'active' : ''}`}
             onClick={() => setActiveTab('users')}
           >
-            Users
+            {t('tab.users')}
           </button>
           <button
             className={`tab ${activeTab === 'logs' ? 'active' : ''}`}
             onClick={() => setActiveTab('logs')}
           >
-            Logs {logs.length > 0 && <span className="log-count">({logs.length})</span>}
+            {t('tab.logs')} {logs.length > 0 && <span className="log-count">({logs.length})</span>}
           </button>
           <button
             className={`tab ${activeTab === 'config' ? 'active' : ''}`}
             onClick={() => setActiveTab('config')}
           >
-            Configuration
+            {t('tab.config')}
           </button>
         </div>
       </header>
@@ -290,22 +305,22 @@ function App() {
         <div className="status-panel">
           <div className="status-indicator">
             <span className={`status-dot ${status?.is_running ? 'running' : 'stopped'}`} />
-            <span className="status-text">{status?.is_running ? 'Running' : 'Stopped'}</span>
+            <span className="status-text">{status?.is_running ? t('status.running') : t('status.stopped')}</span>
           </div>
 
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-label">Uptime</div>
+              <div className="stat-label">{t('status.uptime')}</div>
               <div className="stat-value">
                 {status?.is_running ? formatUptime(status.uptime_seconds) : '-'}
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">PID</div>
+              <div className="stat-label">{t('status.pid')}</div>
               <div className="stat-value">{status?.pid ?? '-'}</div>
             </div>
             <div className="stat-card">
-              <div className="stat-label">Project</div>
+              <div className="stat-label">{t('status.project')}</div>
               <div className="stat-value path">{projectPath || '-'}</div>
             </div>
           </div>
@@ -314,15 +329,15 @@ function App() {
             {status?.is_running ? (
               <>
                 <button className="btn btn-secondary" onClick={restartBot} disabled={loading}>
-                  {loading ? 'Restarting...' : 'Restart Bot'}
+                  {loading ? t('control.restarting') : t('control.restart')}
                 </button>
                 <button className="btn btn-danger" onClick={stopBot} disabled={loading}>
-                  {loading ? 'Stopping...' : 'Stop Bot'}
+                  {loading ? t('control.stopping') : t('control.stop')}
                 </button>
               </>
             ) : (
               <button className="btn btn-primary" onClick={startBot} disabled={loading}>
-                {loading ? 'Starting...' : 'Start Bot'}
+                {loading ? t('control.starting') : t('control.start')}
               </button>
             )}
           </div>
@@ -340,20 +355,20 @@ function App() {
       {activeTab === 'logs' && (
         <div className="logs-panel">
           <div className="logs-header">
-            <span className="logs-title">Bot Logs</span>
+            <span className="logs-title">{t('logs.title')}</span>
             <button
               className="btn btn-secondary btn-small"
               onClick={() => setLogs([])}
               disabled={logs.length === 0}
             >
-              Clear Logs
+              {t('logs.clear')}
             </button>
           </div>
           <div className="logs-filters">
             <input
               type="text"
               className="log-filter-input"
-              placeholder="Search logs..."
+              placeholder={t('logs.search')}
               value={logSearch}
               onChange={(e) => setLogSearch(e.target.value)}
             />
@@ -382,8 +397,8 @@ function App() {
             {filteredLogs.length === 0 ? (
               <div className="logs-empty">
                 {logs.length === 0
-                  ? 'No logs yet. Start the bot to see logs.'
-                  : 'No logs match your filters.'}
+                  ? t('logs.empty')
+                  : t('logs.noMatch')}
               </div>
             ) : (
               filteredLogs.map((log, index) => (
@@ -402,13 +417,13 @@ function App() {
       {activeTab === 'config' && config && (
         <div className="config-panel">
           <div className="form-group">
-            <label>Telegram Bot Token</label>
+            <label>{t('config.token')}</label>
             <div className="input-with-button">
               <input
                 type={showToken ? 'text' : 'password'}
                 value={config.TG_BOT_TOKEN || ''}
                 onChange={(e) => updateConfig('TG_BOT_TOKEN', e.target.value)}
-                placeholder="Enter your Telegram bot token"
+                placeholder={t('config.tokenPlaceholder')}
               />
               <button
                 type="button"
@@ -422,7 +437,7 @@ function App() {
           </div>
 
           <div className="form-group">
-            <label>Claude Code Path</label>
+            <label>{t('config.claudePath')}</label>
             <input
               type="text"
               value={config.CLAUDE_CODE_PATH || ''}
@@ -432,7 +447,7 @@ function App() {
           </div>
 
           <div className="form-group">
-            <label>Anthropic API Key</label>
+            <label>{t('config.apiKey')}</label>
             <div className="input-with-button">
               <input
                 type={showApiKey ? 'text' : 'password'}
@@ -449,22 +464,22 @@ function App() {
                 {showApiKey ? '🙈' : '👁️'}
               </button>
             </div>
-            <p className="form-hint">Get your API key from console.anthropic.com</p>
+            <p className="form-hint">{t('config.apiKeyHint')}</p>
           </div>
 
           <div className="form-group">
-            <label>Anthropic Base URL (Optional)</label>
+            <label>{t('config.baseUrl')}</label>
             <input
               type="text"
               value={config.ANTHROPIC_BASE_URL || ''}
               onChange={(e) => updateConfig('ANTHROPIC_BASE_URL', e.target.value)}
               placeholder="https://api.anthropic.com (leave empty for default)"
             />
-            <p className="form-hint">Only set if using a proxy or custom endpoint</p>
+            <p className="form-hint">{t('config.baseUrlHint')}</p>
           </div>
 
           <div className="form-group">
-            <label>Work Directory</label>
+            <label>{t('config.workDir')}</label>
             <input
               type="text"
               value={config.WORK_DIR || ''}
@@ -474,7 +489,7 @@ function App() {
           </div>
 
           <div className="form-group">
-            <label>Storage Type</label>
+            <label>{t('config.storageType')}</label>
             <select
               value={config.STORAGE_TYPE || 'memory'}
               onChange={(e) => updateConfig('STORAGE_TYPE', e.target.value)}
@@ -486,7 +501,7 @@ function App() {
 
           {config.STORAGE_TYPE === 'redis' && (
             <div className="form-group">
-              <label>Redis URL</label>
+              <label>{t('config.redisUrl')}</label>
               <input
                 type="text"
                 value={config.REDIS_URL || ''}
@@ -497,7 +512,7 @@ function App() {
           )}
 
           <div className="form-group">
-            <label>Log Level</label>
+            <label>{t('config.logLevel')}</label>
             <select
               value={config.LOG_LEVEL || 'info'}
               onChange={(e) => updateConfig('LOG_LEVEL', e.target.value)}
@@ -519,30 +534,47 @@ function App() {
                   try {
                     await invoke('set_autostart_enabled', { enabled });
                     setAutostart(enabled);
-                    showMessage('success', enabled ? 'Auto-start enabled' : 'Auto-start disabled');
+                    showMessage('success', enabled ? t('msg.autostartEnabled') : t('msg.autostartDisabled'));
                   } catch (error) {
-                    showMessage('error', `Failed to set auto-start: ${error}`);
+                    showMessage('error', `${t('msg.failedAutostart')}: ${error}`);
                   }
                 }}
               />
-              <span>Launch at startup</span>
+              <span>{t('config.autostart')}</span>
             </label>
-            <p className="form-hint">Automatically start ChatCode when you log in</p>
+            <p className="form-hint">{t('config.autostartHint')}</p>
           </div>
 
           <div className="controls">
             <button className="btn btn-secondary" onClick={loadConfig} disabled={loading}>
-              Reload
+              {t('config.reload')}
             </button>
             <button className="btn btn-primary" onClick={saveConfig} disabled={loading}>
-              {loading ? 'Saving...' : 'Save Configuration'}
+              {loading ? t('config.saving') : t('config.save')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Overlay */}
+      {showSettings && (
+        <div className="settings-overlay" onClick={() => setShowSettings(false)}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <SettingsPage onClose={() => setShowSettings(false)} />
           </div>
         </div>
       )}
     </div>
     )}
     </>
+  );
+}
+
+function App() {
+  return (
+    <SettingsProvider>
+      <AppContent />
+    </SettingsProvider>
   );
 }
 

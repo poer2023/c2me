@@ -96,6 +96,9 @@ export class SessionProgress {
 
     // Send first heartbeat immediately
     await this.sendHeartbeat();
+    
+    // Update status message immediately to show correct initial time (fixes processing(0s) bug)
+    await this.updateStatusMessage();
   }
 
   /**
