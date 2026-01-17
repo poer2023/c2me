@@ -802,14 +802,16 @@ pub fn run() {
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             }
 
-            // Create tray menu items
-            let start_i = MenuItem::with_id(app, "start", "▶️ Start Bot", true, None::<&str>)?;
-            let stop_i = MenuItem::with_id(app, "stop", "⏹️ Stop Bot", true, None::<&str>)?;
-            let restart_i = MenuItem::with_id(app, "restart", "🔄 Restart Bot", true, None::<&str>)?;
-            let dashboard_i = MenuItem::with_id(app, "dashboard", "📊 Open Dashboard", true, None::<&str>)?;
-            let quit_i = MenuItem::with_id(app, "quit", "❌ Quit ChatCode", true, None::<&str>)?;
+            // Create tray menu items (Chinese, concise style)
+            let dashboard_i = MenuItem::with_id(app, "dashboard", "Dashboard", true, None::<&str>)?;
+            let separator1 = PredefinedMenuItem::separator(app)?;
+            let start_i = MenuItem::with_id(app, "start", "启动", true, None::<&str>)?;
+            let stop_i = MenuItem::with_id(app, "stop", "停止", true, None::<&str>)?;
+            let restart_i = MenuItem::with_id(app, "restart", "重启", true, None::<&str>)?;
+            let separator2 = PredefinedMenuItem::separator(app)?;
+            let quit_i = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
-            let menu = Menu::with_items(app, &[&start_i, &stop_i, &restart_i, &dashboard_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&dashboard_i, &separator1, &start_i, &stop_i, &restart_i, &separator2, &quit_i])?;
 
             // Create tray icon with icon from resources
             let tray = TrayIconBuilder::with_id("main")

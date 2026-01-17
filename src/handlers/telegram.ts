@@ -87,8 +87,22 @@ export class TelegramHandler {
       this.bot.telegram.sendMessage(
         chatId,
         `⚠️ Rate limit detected. Pausing for ${retryAfter}s to avoid API restrictions.`
-      ).catch(() => {});
+      ).catch(() => { });
     });
+
+    // Register bot commands menu (visible when user taps "/" in Telegram)
+    this.bot.telegram.setMyCommands([
+      { command: 'start', description: '开始使用' },
+      { command: 'new', description: '创建新项目' },
+      { command: 'list', description: '项目列表' },
+      { command: 'clear', description: '清除会话' },
+      { command: 'abort', description: '中止任务' },
+      { command: 'compact', description: '压缩上下文' },
+      { command: 'undo', description: '撤销操作' },
+      { command: 'model', description: '切换模型' },
+      { command: 'progress', description: '进度设置' },
+      { command: 'help', description: '帮助文档' },
+    ]).catch(err => console.error('Failed to set bot commands:', err));
 
     this.setupHandlers();
   }
@@ -142,7 +156,9 @@ export class TelegramHandler {
     // Command handlers with activity tracking
     this.bot.start((ctx) => this.withTracking(ctx, 'start', () => this.commandHandler.handleStart(ctx)));
     this.bot.command('createproject', (ctx) => this.withTracking(ctx, 'createproject', () => this.commandHandler.handleCreateProject(ctx)));
+    this.bot.command('new', (ctx) => this.withTracking(ctx, 'new', () => this.commandHandler.handleCreateProject(ctx)));
     this.bot.command('listproject', (ctx) => this.withTracking(ctx, 'listproject', () => this.commandHandler.handleListProject(ctx)));
+    this.bot.command('list', (ctx) => this.withTracking(ctx, 'list', () => this.commandHandler.handleListProject(ctx)));
     this.bot.command('exitproject', (ctx) => this.withTracking(ctx, 'exitproject', () => this.commandHandler.handleExitProject(ctx)));
 
     this.bot.command('help', (ctx) => this.withTracking(ctx, 'help', () => this.commandHandler.handleHelp(ctx)));

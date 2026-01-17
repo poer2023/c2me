@@ -14,7 +14,7 @@ interface MessageSimulatorProps {
   apiBaseUrl?: string;
 }
 
-export function MessageSimulator({ isRunning, apiBaseUrl = 'http://localhost:3000' }: MessageSimulatorProps) {
+export function MessageSimulator({ isRunning, apiBaseUrl = 'http://localhost:3002' }: MessageSimulatorProps) {
   const { t } = useSettings();
   const [chats, setChats] = useState<ChatSummary[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<number | null>(null);
