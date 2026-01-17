@@ -59,9 +59,9 @@ export class KeyboardFactory {
   }
 
   static createCompletionKeyboard(): any {
-    return Markup.keyboard([
-      ['/clear', '/abort']
-    ]).resize();
+    // 移除危险的常驻按钮，避免误操作
+    // 用户需要手动输入 /clear 或 /abort 命令
+    return Markup.removeKeyboard();
   }
 
   static createProjectListKeyboard(projects: Project[]): any {

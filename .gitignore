@@ -72,3 +72,8 @@ tg-claudecode-bot
 
 # Wrangler config (contains sensitive IDs)
 workers/wrangler.toml
+# Self-signed certificates (local development only)
+.certs/
+*.key
+*.crt
+*.pem

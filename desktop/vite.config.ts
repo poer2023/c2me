@@ -1,5 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import fs from "fs";
+import path from "path";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -17,9 +19,14 @@ export default defineConfig(async () => ({
     port: 1420,
     strictPort: true,
     host: host || false,
+    // HTTPS configuration for self-signed certificate
+    https: {
+      key: fs.readFileSync(path.resolve(__dirname, "../.certs/localhost.key")),
+      cert: fs.readFileSync(path.resolve(__dirname, "../.certs/localhost.crt")),
+    },
     hmr: host
       ? {
-          protocol: "ws",
+          protocol: "wss",  // 使用 wss 协议以支持 HTTPS
           host,
           port: 1421,
         }
