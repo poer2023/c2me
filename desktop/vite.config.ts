@@ -6,6 +6,10 @@ import path from "path";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+// Check if SSL certificates exist (only for local development)
+const certPath = path.resolve(__dirname, "../.certs/localhost.key");
+const hasCerts = fs.existsSync(certPath);
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react()],
@@ -19,14 +23,16 @@ export default defineConfig(async () => ({
     port: 1420,
     strictPort: true,
     host: host || false,
-    // HTTPS configuration for self-signed certificate
-    https: {
-      key: fs.readFileSync(path.resolve(__dirname, "../.certs/localhost.key")),
-      cert: fs.readFileSync(path.resolve(__dirname, "../.certs/localhost.crt")),
-    },
+    // HTTPS configuration for self-signed certificate (only if certs exist)
+    https: hasCerts
+      ? {
+          key: fs.readFileSync(path.resolve(__dirname, "../.certs/localhost.key")),
+          cert: fs.readFileSync(path.resolve(__dirname, "../.certs/localhost.crt")),
+        }
+      : undefined,
     hmr: host
       ? {
-          protocol: "wss",  // 使用 wss 协议以支持 HTTPS
+          protocol: hasCerts ? "wss" : "ws",  // Use wss only if HTTPS is enabled
           host,
           port: 1421,
         }
