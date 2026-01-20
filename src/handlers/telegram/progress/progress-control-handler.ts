@@ -1,7 +1,7 @@
 import { Context, Telegraf } from 'telegraf';
 import { ProgressManager } from '../../../utils/progress-manager';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
-import { SAFE_LIMITS, validateSettings, DEFAULT_PROGRESS_SETTINGS } from '../../../utils/progress-config';
+import { SAFE_LIMITS, DEFAULT_PROGRESS_SETTINGS } from '../../../utils/progress-config';
 import { TelegramSender } from '../../../services/telegram-sender';
 
 /**

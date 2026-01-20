@@ -5,6 +5,7 @@ import { PermissionManager } from './permission-manager';
 import { StreamManager } from '../utils/stream-manager';
 import { incrementCounter, startTiming, incrementGauge, decrementGauge } from '../utils/metrics';
 import { MessageContent } from '../utils/image-handler';
+import { logger } from '../utils/logger';
 
 export class ClaudeManager {
   private storage: IStorage;
@@ -110,7 +111,9 @@ export class ClaudeManager {
           userSession.sessionId = message.session_id;
           await this.storage.saveUserSession(userSession);
         }
-        console.debug(JSON.stringify(message, null, 2));
+
+        // Phase 3: Use structured logger with lazy serialization (avoids JSON.stringify in production)
+        logger.debug({ messageType: message.type, sessionId: message.session_id }, 'Claude SDK message received');
 
         // Detect tool use and tool result in message content
         const toolInfo = this.extractToolInfo(message);

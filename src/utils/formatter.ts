@@ -379,7 +379,7 @@ export class MessageFormatter {
             try {
               const diffText = await this.formatMultiEditResult(input.file_path, input.edits, true);
               multiResult += diffText;
-            } catch (error) {
+            } catch {
               multiResult += '⚠️ Could not generate diff preview\n';
             }
           }

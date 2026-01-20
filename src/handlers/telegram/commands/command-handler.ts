@@ -233,7 +233,7 @@ export class CommandHandler {
       } else {
         await ctx.reply('ℹ️ No active query to abort. All queries have completed.');
       }
-    } catch (error) {
+    } catch {
       await ctx.reply(this.formatter.formatError('Failed to abort query. Please try again.'), { parse_mode: 'MarkdownV2' });
     }
   }

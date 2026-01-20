@@ -10,6 +10,11 @@ import { ExpressServer } from './server/express';
 import { MessageFormatter } from './utils/formatter';
 import { PermissionManager } from './handlers/permission-manager';
 import { initMessageStore } from './services/message-store';
+import { getDefaultRateLimiter } from './utils/rate-limiter';
+import { logger } from './utils/logger';
+
+// Phase 4: Rate limiter cleanup interval reference
+let rateLimiterCleanupInterval: NodeJS.Timeout | null = null;
 
 async function main(): Promise<void> {
   try {
@@ -43,6 +48,7 @@ async function main(): Promise<void> {
     console.log('Permission manager initialized');
 
     // First create a placeholder handler that we'll set up later
+    // eslint-disable-next-line prefer-const
     let telegramHandler: TelegramHandler;
 
     // Initialize SDK manager with callback architecture
@@ -99,6 +105,13 @@ async function main(): Promise<void> {
       console.log('Telegram bot is running in polling mode');
     }
 
+    // Phase 4: Start rate limiter cleanup interval (every hour)
+    rateLimiterCleanupInterval = setInterval(() => {
+      const limiter = getDefaultRateLimiter();
+      limiter.cleanupOldBuckets();
+      logger.info({ stats: limiter.getStats() }, 'Rate limiter cleanup completed');
+    }, 60 * 60 * 1000); // 1 hour
+
     // Handle graceful shutdown (register after successful startup)
     process.once('SIGINT', () => gracefulShutdown(bot, claudeSDK, storage));
     process.once('SIGTERM', () => gracefulShutdown(bot, claudeSDK, storage));
@@ -117,6 +130,12 @@ async function gracefulShutdown(
   console.log('Received shutdown signal, shutting down gracefully...');
 
   try {
+    // Phase 4: Stop rate limiter cleanup interval
+    if (rateLimiterCleanupInterval) {
+      clearInterval(rateLimiterCleanupInterval);
+      rateLimiterCleanupInterval = null;
+    }
+
     // Stop the bot
     bot.stop('SIGINT');
 
@@ -126,7 +145,7 @@ async function gracefulShutdown(
     // Disconnect storage
     await storage.disconnect();
     console.log('Storage disconnected');
-    
+
     console.log('Graceful shutdown completed');
     process.exit(0);
   } catch (error) {

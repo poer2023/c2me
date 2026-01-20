@@ -3,7 +3,6 @@ import { SessionProgress } from './session-progress';
 import {
   ProgressSettings,
   ProgressStats,
-  DEFAULT_PROGRESS_SETTINGS,
   validateSettings,
   formatSettingsDisplay,
   formatStatsDisplay,

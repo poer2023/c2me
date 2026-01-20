@@ -199,40 +199,44 @@ export class TelegramHandler {
   }
 
   /**
-   * Wrap handler with user activity tracking
+   * Wrap handler with user activity tracking (Phase 3: async fire-and-forget)
    */
   private async withTracking(ctx: any, command?: string, handler?: () => Promise<void>): Promise<void> {
-    // Track user activity
+    // Phase 3: Fire-and-forget activity tracking - don't block the main request
     if (ctx.chat && ctx.from) {
-      try {
-        const update: {
-          chatId: number;
-          username?: string;
-          firstName?: string;
-          lastName?: string;
-          command?: string;
-          timestamp: Date;
-        } = {
-          chatId: ctx.chat.id,
-          timestamp: new Date(),
-        };
-
-        if (ctx.from.username) update.username = ctx.from.username;
-        if (ctx.from.first_name) update.firstName = ctx.from.first_name;
-        if (ctx.from.last_name) update.lastName = ctx.from.last_name;
-        if (command) update.command = command;
-
-        await this.storage.trackUserActivity(update);
-      } catch (error) {
-        // Don't fail the request if tracking fails
+      this.trackActivityAsync(ctx, command).catch((error) => {
         console.error('Failed to track user activity:', error);
-      }
+      });
     }
 
-    // Execute the actual handler
+    // Execute the actual handler immediately without waiting for tracking
     if (handler) {
       await handler();
     }
+  }
+
+  /**
+   * Async activity tracking - runs in background without blocking requests
+   */
+  private async trackActivityAsync(ctx: any, command?: string): Promise<void> {
+    const update: {
+      chatId: number;
+      username?: string;
+      firstName?: string;
+      lastName?: string;
+      command?: string;
+      timestamp: Date;
+    } = {
+      chatId: ctx.chat.id,
+      timestamp: new Date(),
+    };
+
+    if (ctx.from.username) update.username = ctx.from.username;
+    if (ctx.from.first_name) update.firstName = ctx.from.first_name;
+    if (ctx.from.last_name) update.lastName = ctx.from.last_name;
+    if (command) update.command = command;
+
+    await this.storage.trackUserActivity(update);
   }
 
   public async handleClaudeMessage(chatId: number, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {

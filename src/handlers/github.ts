@@ -47,7 +47,7 @@ export class GitHubManager {
       // Remove existing project directory if it exists
       try {
         await fs.rmdir(projectDir, { recursive: true });
-      } catch (error) {
+      } catch {
         // Directory doesn't exist, which is fine
       }
 

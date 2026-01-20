@@ -288,7 +288,7 @@ export class FileBrowserHandler {
 
     try {
       await this.telegramSender.safeEditMessage(chatId, messageId, message, keyboard);
-    } catch (error) {
+    } catch {
       // If edit fails, send new message
       await this.sendDirectoryListing(chatId, browsingState);
     }

@@ -58,7 +58,7 @@ export class ExpressServer {
       try {
         const metrics: MetricsSnapshot = getMetricsSnapshot();
         res.json(metrics);
-      } catch (error) {
+      } catch {
         res.status(500).json({ error: 'Failed to get metrics' });
       }
     });

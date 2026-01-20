@@ -13,7 +13,7 @@ export class DirectoryManager {
     try {
       const stats = await fs.promises.stat(directoryPath);
       return stats.isDirectory();
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -89,7 +89,7 @@ export class DirectoryManager {
         
         try {
           stats = await fs.promises.stat(itemPath);
-        } catch (error) {
+        } catch {
           // Skip items that can't be accessed
           continue;
         }
@@ -185,7 +185,7 @@ export class DirectoryManager {
       } finally {
         await fd.close();
       }
-    } catch (error) {
+    } catch {
       return false;
     }
   }
