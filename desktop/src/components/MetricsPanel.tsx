@@ -81,8 +81,13 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
       setMetrics(data);
       setError(null);
     } catch (err) {
-      // Silently handle connection errors when bot just started
-      setError(null);
+      // Show friendly error message instead of technical details
+      const errStr = `${err}`;
+      if (errStr.includes('error sending request') || errStr.includes('connection')) {
+        setError('正在连接机器人服务...');
+      } else {
+        setError('获取数据失败，请稍后重试');
+      }
     }
     setLoading(false);
   };
