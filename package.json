@@ -1,6 +1,6 @@
 {
   "name": "c2me",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "description": "Telegram bot for Claude Code integration",
   "main": "dist/main.js",
   "scripts": {
