@@ -4,6 +4,7 @@ import { UserState, PermissionMode } from '../../../models/types';
 import { IStorage } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { MESSAGES } from '../../../constants/messages';
+import { VALID_MODEL_IDS, AVAILABLE_MODELS } from '../../../constants/models';
 import { KeyboardFactory } from '../keyboards/keyboard-factory';
 import { ClaudeManager } from '../../claude';
 import { AuthService } from '../../../services/auth-service';
@@ -380,17 +381,17 @@ export class CommandHandler {
 
     if (!modelArg) {
       // Show model selection keyboard
+      const modelList = AVAILABLE_MODELS.map(m => `• **${m.id}** - ${m.description}`).join('\n');
       await ctx.reply(
-        '🤖 Select Claude model:\n\n• **opus** - Most capable, best for complex tasks\n• **sonnet** - Balanced performance and speed\n• **haiku** - Fastest, best for simple tasks',
+        `🤖 Select Claude model:\n\n${modelList}`,
         KeyboardFactory.createModelSelectionKeyboard()
       );
       return;
     }
 
     // Validate model
-    const validModels = ['opus', 'sonnet', 'haiku'];
-    if (!validModels.includes(modelArg)) {
-      await ctx.reply(this.formatter.formatError(`Invalid model. Choose from: ${validModels.join(', ')}`), { parse_mode: 'MarkdownV2' });
+    if (!VALID_MODEL_IDS.includes(modelArg as typeof VALID_MODEL_IDS[number])) {
+      await ctx.reply(this.formatter.formatError(`Invalid model. Choose from: ${VALID_MODEL_IDS.join(', ')}`), { parse_mode: 'MarkdownV2' });
       return;
     }
 

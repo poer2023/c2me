@@ -1,5 +1,6 @@
 import { Markup } from 'telegraf';
 import { MESSAGES } from '../../../constants/messages';
+import { AVAILABLE_MODELS } from '../../../constants/models';
 import { Project } from '../../../models/project';
 import { ProgressSettings } from '../../../utils/progress-config';
 import { FileBrowsingState } from '../../../models/types';
@@ -251,11 +252,9 @@ export class KeyboardFactory {
    */
   static createModelSelectionKeyboard(): ReturnType<typeof Markup.inlineKeyboard> {
     return Markup.inlineKeyboard([
-      [
-        Markup.button.callback('🧠 Opus', 'model:opus'),
-        Markup.button.callback('⚡ Sonnet', 'model:sonnet'),
-        Markup.button.callback('🚀 Haiku', 'model:haiku'),
-      ],
+      AVAILABLE_MODELS.map(m =>
+        Markup.button.callback(m.label, `model:${m.id}`)
+      ),
       [
         Markup.button.callback('❌ Cancel', 'cancel'),
       ],

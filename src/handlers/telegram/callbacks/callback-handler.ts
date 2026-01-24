@@ -8,6 +8,7 @@ import { PermissionManager } from '../../permission-manager';
 import { ProgressControlHandler } from '../progress/progress-control-handler';
 import { ClaudeManager } from '../../claude';
 import { incrementCounter } from '../../../utils/metrics';
+import { VALID_MODEL_IDS } from '../../../constants/models';
 import { ToolHandler } from '../tools/tool-handler';
 
 export class CallbackHandler {
@@ -237,7 +238,7 @@ export class CallbackHandler {
     try {
       const model = data.replace('model:', '');
 
-      if (!['opus', 'sonnet', 'haiku'].includes(model)) {
+      if (!VALID_MODEL_IDS.includes(model as typeof VALID_MODEL_IDS[number])) {
         await this.bot.telegram.sendMessage(chatId, 'Invalid model selection');
         return;
       }
