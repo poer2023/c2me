@@ -134,7 +134,7 @@ export class UserSessionModel {
   }
 
   // Serialization methods
-  toJSON(): any {
+  toJSON(): Record<string, unknown> {
     return {
       chatId: this.chatId,
       state: this.state,
@@ -149,7 +149,7 @@ export class UserSessionModel {
     };
   }
 
-  static fromJSON(data: any): UserSessionModel {
+  static fromJSON(data: Record<string, unknown>): UserSessionModel {
     const userSession = new UserSessionModel(data.chatId);
     userSession.state = data.state;
     userSession.lastActivity = new Date(data.lastActivity);

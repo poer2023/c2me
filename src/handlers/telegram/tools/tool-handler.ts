@@ -1,6 +1,6 @@
 import { Markup, Telegraf } from 'telegraf';
 import { UserSessionModel } from '../../../models/user-session';
-import { TargetTool, PermissionMode, getToolVisibilityLevel } from '../../../models/types';
+import { TargetTool, PermissionMode, getToolVisibilityLevel, ClaudeMessage } from '../../../models/types';
 import { IStorage, ToolData } from '../../../storage/interface';
 import { MessageFormatter } from '../../../utils/formatter';
 import { Config } from '../../../config/config';
@@ -94,7 +94,7 @@ export class ToolHandler {
     return this.aggregator;
   }
 
-  async handleToolUse(chatId: number, message: any, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
+  async handleToolUse(chatId: number, message: ClaudeMessage, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
     const input = this.extractToolInput(message, toolInfo.toolName);
 
     // Update progress status with current tool
@@ -125,7 +125,7 @@ export class ToolHandler {
     await this.sendDefaultToolLoadingMessage(chatId, message, toolInfo, user, parentToolUseId);
   }
 
-  async handleToolResult(chatId: number, message: any, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
+  async handleToolResult(chatId: number, message: ClaudeMessage, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
     if (!user.sessionId) return;
 
     const toolResult = this.extractToolResult(message);
@@ -163,12 +163,12 @@ export class ToolHandler {
 
 
 
-  private async sendDefaultToolLoadingMessage(chatId: number, message: any, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
+  private async sendDefaultToolLoadingMessage(chatId: number, message: ClaudeMessage, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
     const loadingMessage = await this.getToolLoadingMessage(toolInfo.toolName, message);
     await this.sendToolLoadingMessage(chatId, loadingMessage, toolInfo, user, parentToolUseId);
   }
 
-  private async getToolLoadingMessage(toolName: string, message: any, rawDiff: boolean = true): Promise<string> {
+  private async getToolLoadingMessage(toolName: string, message: ClaudeMessage, rawDiff: boolean = true): Promise<string> {
     const targetTools = Object.values(TargetTool);
 
     if (!targetTools.includes(toolName as TargetTool)) {
@@ -176,7 +176,7 @@ export class ToolHandler {
     }
 
     // Extract input parameters from message
-    let input: any = null;
+    let input: Record<string, unknown> | null = null;
     if (message.message?.content) {
       for (const content of message.message.content) {
         if (content.type === 'tool_use' && content.name === toolName) {
@@ -189,7 +189,7 @@ export class ToolHandler {
     return await this.formatter.formatToolUse(toolName, input, rawDiff);
   }
 
-  private extractToolInput(message: any, toolName: string): any {
+  private extractToolInput(message: ClaudeMessage, toolName: string): Record<string, unknown> | null {
     if (!message.message?.content) return null;
 
     for (const content of message.message.content) {
@@ -245,7 +245,7 @@ export class ToolHandler {
     }
   }
 
-  private async updateToolResultMessage(chatId: number, storedTool: ToolData, toolResult: { content: any; isError: boolean }, sessionId: string, toolId: string, parentToolUseId?: string): Promise<void> {
+  private async updateToolResultMessage(chatId: number, storedTool: ToolData, toolResult: { content: unknown; isError: boolean }, sessionId: string, toolId: string, parentToolUseId?: string): Promise<void> {
     const resultText = this.formatter.formatToolResult(storedTool.name, toolResult.content, toolResult.isError);
 
     const updatedParent = await this.tryUpdateParentWithResult(chatId, storedTool, resultText, sessionId, toolId, parentToolUseId);
@@ -304,7 +304,7 @@ export class ToolHandler {
     }
   }
 
-  private extractToolResult(message: any): { content: any; isError: boolean } {
+  private extractToolResult(message: ClaudeMessage): { content: unknown; isError: boolean } {
     if (message.message?.content) {
       for (const content of message.message.content) {
         if (content.type === 'tool_result') {
@@ -318,7 +318,7 @@ export class ToolHandler {
     return { content: '', isError: false };
   }
 
-  private async handleDiffToolUse(chatId: number, message: any, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId: string | undefined, input: any): Promise<void> {
+  private async handleDiffToolUse(chatId: number, message: ClaudeMessage, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId: string | undefined, input: Record<string, unknown> | null): Promise<void> {
 
     try {
       // Generate diff patch from input
@@ -380,7 +380,11 @@ export class ToolHandler {
     }
   }
 
-  private async generateDiffPatch(toolName: string, input: any): Promise<string | null> {
+  private async generateDiffPatch(toolName: string, input: Record<string, unknown> | null): Promise<string | null> {
+    if (!input) {
+      return null;
+    }
+
     if (toolName === TargetTool.Edit) {
       if (!input.file_path || !input.old_string || !input.new_string) {
         return null;

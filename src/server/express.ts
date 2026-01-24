@@ -1,7 +1,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { Telegraf } from 'telegraf';
 import { WebhookConfig } from '../config/config';
-import { getMetricsSnapshot, MetricsSnapshot } from '../utils/metrics';
+import { getMetricsSnapshot, getExtendedMetricsSnapshot, MetricsSnapshot, ExtendedMetricsSnapshot, ToolDiscoveryMetrics } from '../utils/metrics';
+import { getCachedMetadata } from '../utils/metadata-extractor';
 import { IStorage } from '../storage/interface';
 import { createMessageRoutes } from './message-routes';
 
@@ -63,6 +64,32 @@ export class ExpressServer {
       }
     });
 
+    // Extended metrics endpoint with mutex, tool discovery, and Redis stats
+    this.app.get('/metrics/extended', (_req: Request, res: Response) => {
+      try {
+        // Build tool discovery metrics from cached metadata
+        const cachedMetadata = getCachedMetadata();
+        const toolDiscovery: ToolDiscoveryMetrics = cachedMetadata
+          ? {
+              extractedAt: cachedMetadata.extractedAt.toISOString(),
+              toolCount: cachedMetadata.tools.length,
+              tools: cachedMetadata.tools.map(t => t.name),
+              slashCommands: cachedMetadata.slashCommands,
+            }
+          : {
+              extractedAt: null,
+              toolCount: 0,
+              tools: [],
+              slashCommands: [],
+            };
+
+        const extendedMetrics: ExtendedMetricsSnapshot = getExtendedMetricsSnapshot(toolDiscovery);
+        res.json(extendedMetrics);
+      } catch {
+        res.status(500).json({ error: 'Failed to get extended metrics' });
+      }
+    });
+
     // Analytics endpoint for user statistics (Phase 2)
     this.app.get('/analytics', async (_req: Request, res: Response) => {
       try {
@@ -106,7 +133,7 @@ export class ExpressServer {
           resolve();
         });
 
-        server.on('error', (error: any) => {
+        server.on('error', (error: Error) => {
           console.error('Express server failed to start:', error);
           reject(error);
         });
@@ -125,7 +152,7 @@ export class ExpressServer {
       const webhookUrl = `${webhookConfig.domain}${webhookConfig.path}`;
       console.log(`Setting up webhook: ${webhookUrl}`);
       
-      const webhookOptions: any = {
+      const webhookOptions: { url: string; secret_token?: string } = {
         url: webhookUrl,
       };
 

@@ -2,6 +2,7 @@ import { Markup } from 'telegraf';
 import { MESSAGES } from '../../../constants/messages';
 import { Project } from '../../../models/project';
 import { ProgressSettings } from '../../../utils/progress-config';
+import { FileBrowsingState } from '../../../models/types';
 
 /**
  * Options for execution control keyboard
@@ -16,7 +17,7 @@ export class KeyboardFactory {
   /**
    * Create execution control keyboard for aggregated messages
    */
-  static createExecutionKeyboard(options: ExecutionKeyboardOptions): any {
+  static createExecutionKeyboard(options: ExecutionKeyboardOptions): ReturnType<typeof Markup.inlineKeyboard> {
     const buttons = [];
 
     if (options.canStop) {
@@ -40,7 +41,7 @@ export class KeyboardFactory {
     return Markup.inlineKeyboard([buttons]);
   }
 
-  static createProjectTypeKeyboard(): any {
+  static createProjectTypeKeyboard(): ReturnType<typeof Markup.inlineKeyboard> {
     return Markup.inlineKeyboard([
       [
         Markup.button.callback(MESSAGES.BUTTONS.GITHUB_REPO, 'project_type_github'),
@@ -52,19 +53,19 @@ export class KeyboardFactory {
     ]);
   }
 
-  static createCancelKeyboard(): any {
+  static createCancelKeyboard(): ReturnType<typeof Markup.inlineKeyboard> {
     return Markup.inlineKeyboard([
       Markup.button.callback(MESSAGES.BUTTONS.CANCEL, 'cancel'),
     ]);
   }
 
-  static createCompletionKeyboard(): any {
+  static createCompletionKeyboard(): ReturnType<typeof Markup.removeKeyboard> {
     // 移除危险的常驻按钮，避免误操作
     // 用户需要手动输入 /clear 或 /abort 命令
     return Markup.removeKeyboard();
   }
 
-  static createProjectListKeyboard(projects: Project[]): any {
+  static createProjectListKeyboard(projects: Project[]): ReturnType<typeof Markup.inlineKeyboard> {
     const keyboard = [];
     
     // Add project buttons, 2 per row
@@ -100,7 +101,7 @@ export class KeyboardFactory {
     return Markup.inlineKeyboard(keyboard);
   }
 
-  static createDirectoryKeyboard(browsingState: any): any {
+  static createDirectoryKeyboard(browsingState: FileBrowsingState): ReturnType<typeof Markup.inlineKeyboard> {
     const { currentPage, itemsPerPage, totalItems, items } = browsingState;
     const keyboard = [];
 
@@ -163,7 +164,7 @@ export class KeyboardFactory {
   /**
    * Create progress settings keyboard
    */
-  static createProgressSettingsKeyboard(settings: ProgressSettings): any {
+  static createProgressSettingsKeyboard(settings: ProgressSettings): ReturnType<typeof Markup.inlineKeyboard> {
     const enabledIcon = settings.enabled ? '✅' : '❌';
     const toolDetailsIcon = settings.showToolDetails ? '✅' : '❌';
     const elapsedTimeIcon = settings.showElapsedTime ? '✅' : '❌';
@@ -201,7 +202,7 @@ export class KeyboardFactory {
   /**
    * Create progress intervals adjustment keyboard
    */
-  static createProgressIntervalsKeyboard(settings: ProgressSettings): any {
+  static createProgressIntervalsKeyboard(settings: ProgressSettings): ReturnType<typeof Markup.inlineKeyboard> {
     return Markup.inlineKeyboard([
       [
         Markup.button.callback(`Edit Interval: ${settings.minEditInterval / 1000}s`, 'progress:interval:edit'),
@@ -233,7 +234,7 @@ export class KeyboardFactory {
   /**
    * Create progress statistics keyboard
    */
-  static createProgressStatsKeyboard(): any {
+  static createProgressStatsKeyboard(): ReturnType<typeof Markup.inlineKeyboard> {
     return Markup.inlineKeyboard([
       [
         Markup.button.callback('🔄 Refresh', 'progress:stats:refresh'),
@@ -248,7 +249,7 @@ export class KeyboardFactory {
   /**
    * Create model selection keyboard
    */
-  static createModelSelectionKeyboard(): any {
+  static createModelSelectionKeyboard(): ReturnType<typeof Markup.inlineKeyboard> {
     return Markup.inlineKeyboard([
       [
         Markup.button.callback('🧠 Opus', 'model:opus'),
@@ -264,7 +265,7 @@ export class KeyboardFactory {
   /**
    * Create quick permission mode switch keyboard
    */
-  static createPermissionSwitchKeyboard(currentMode?: string): any {
+  static createPermissionSwitchKeyboard(currentMode?: string): ReturnType<typeof Markup.inlineKeyboard> {
     const modes = [
       { label: '🛡️ Default', callback: 'perm:default', mode: 'default' },
       { label: '✏️ AcceptEdits', callback: 'perm:acceptedits', mode: 'acceptEdits' },
@@ -283,7 +284,7 @@ export class KeyboardFactory {
   /**
    * Create completion keyboard with permission switch
    */
-  static createCompletionWithPermKeyboard(): any {
+  static createCompletionWithPermKeyboard(): ReturnType<typeof Markup.keyboard> {
     return Markup.keyboard([
       ['/compact', '/undo', '/abort'],
       ['/default', '/acceptedits', '/plan', '/bypass']

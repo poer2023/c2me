@@ -5,6 +5,13 @@ import { Project } from '../models/project';
 import { IStorage } from './interface';
 import { logger } from '../utils/logger';
 import {
+  recordMutexAcquire,
+  recordCacheHit,
+  recordCacheMiss,
+  updateRedisBuffer,
+  updateRedisHealthCheck,
+} from '../utils/metrics';
+import {
   UserActivity,
   UserActivityUpdate,
   AnalyticsSnapshot,
@@ -14,6 +21,40 @@ import {
   isActiveInLastNDays,
 } from '../models/analytics';
 import { ChatMessage, ChatSummary } from '../models/chat-message';
+
+/**
+ * Simple mutex implementation for preventing race conditions
+ */
+class SessionMutex {
+  private locks = new Map<number, Promise<void>>();
+
+  async acquire(chatId: number): Promise<() => void> {
+    const startTime = Date.now();
+    let waited = false;
+
+    // Wait for any existing lock to be released
+    while (this.locks.has(chatId)) {
+      waited = true;
+      await this.locks.get(chatId);
+    }
+
+    // Create a new lock
+    let release: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.locks.set(chatId, lockPromise);
+
+    // Record mutex metrics
+    const waitTimeMs = waited ? Date.now() - startTime : 0;
+    recordMutexAcquire(waitTimeMs);
+
+    return () => {
+      this.locks.delete(chatId);
+      release!();
+    };
+  }
+}
 
 interface BufferedWrite {
   data: string;
@@ -54,6 +95,9 @@ export class RedisStorage implements IStorage {
   // Phase 4: Health check interval
   private healthCheckInterval: NodeJS.Timeout | null = null;
   private readonly HEALTH_CHECK_INTERVAL = 30 * 1000; // 30 seconds
+
+  // Mutex for preventing session race conditions
+  private sessionMutex = new SessionMutex();
 
   constructor(redisUrl?: string, sessionTimeout: number = 30 * 60 * 1000) {
     // Phase 4: Enhanced Redis client configuration with connection optimization
@@ -104,8 +148,10 @@ export class RedisStorage implements IStorage {
     this.healthCheckInterval = setInterval(async () => {
       try {
         await this.client.ping();
+        updateRedisHealthCheck('ok');
         logger.debug('Redis health check passed');
       } catch (error) {
+        updateRedisHealthCheck('fail');
         logger.error({ err: error }, 'Redis health check failed');
       }
     }, this.HEALTH_CHECK_INTERVAL);
@@ -200,6 +246,9 @@ export class RedisStorage implements IStorage {
       ttl,
     });
 
+    // Update buffer metrics
+    updateRedisBuffer(this.writeBuffer.size, this.MAX_BUFFER_SIZE);
+
     // Flush immediately if buffer is full
     if (this.writeBuffer.size >= this.MAX_BUFFER_SIZE) {
       this.flushWrites().catch((err) => {
@@ -226,32 +275,45 @@ export class RedisStorage implements IStorage {
   }
 
   async saveUserSession(userSession: UserSessionModel): Promise<void> {
-    const key = this.getUserSessionKey(userSession.chatId);
-    const data = JSON.stringify(userSession.toJSON());
+    const release = await this.sessionMutex.acquire(userSession.chatId);
+    try {
+      const key = this.getUserSessionKey(userSession.chatId);
+      const data = JSON.stringify(userSession.toJSON());
 
-    // Phase 2: Update local cache immediately for fast reads
-    this.sessionCache.set(userSession.chatId, userSession);
-
-    // Use buffered write for better performance
-    this.bufferWrite(key, data, this.SESSION_TTL);
+      // Update local cache and buffer write atomically under mutex
+      this.sessionCache.set(userSession.chatId, userSession);
+      this.bufferWrite(key, data, this.SESSION_TTL);
+    } finally {
+      release();
+    }
   }
 
   async getUserSession(chatId: number): Promise<UserSessionModel | null> {
-    // Phase 2: Check local cache first (reduces Redis round-trips by ~70%)
+    // Check local cache first (no lock needed for reads)
     const cached = this.sessionCache.get(chatId);
     if (cached) {
+      recordCacheHit();
       return cached;
     }
 
-    // Cache miss - fetch from Redis
-    const key = this.getUserSessionKey(chatId);
-    const data = await this.client.get(key);
+    recordCacheMiss();
 
-    if (!data) {
-      return null;
-    }
-
+    // Cache miss - fetch from Redis with lock to prevent concurrent fetches
+    const release = await this.sessionMutex.acquire(chatId);
     try {
+      // Double-check cache after acquiring lock (another thread may have populated it)
+      const cachedAgain = this.sessionCache.get(chatId);
+      if (cachedAgain) {
+        return cachedAgain;
+      }
+
+      const key = this.getUserSessionKey(chatId);
+      const data = await this.client.get(key);
+
+      if (!data) {
+        return null;
+      }
+
       const parsed = JSON.parse(data);
       const session = UserSessionModel.fromJSON(parsed);
 
@@ -260,17 +322,24 @@ export class RedisStorage implements IStorage {
 
       return session;
     } catch (error) {
-      console.error('Error parsing user session data:', error);
+      logger.error({ err: error, chatId }, 'Error parsing user session data');
       return null;
+    } finally {
+      release();
     }
   }
 
   async deleteUserSession(chatId: number): Promise<void> {
-    // Phase 2: Remove from local cache as well
-    this.sessionCache.delete(chatId);
+    const release = await this.sessionMutex.acquire(chatId);
+    try {
+      // Remove from local cache
+      this.sessionCache.delete(chatId);
 
-    const key = this.getUserSessionKey(chatId);
-    await this.client.del(key);
+      const key = this.getUserSessionKey(chatId);
+      await this.client.del(key);
+    } finally {
+      release();
+    }
   }
 
   async updateSessionActivity(userSession: UserSessionModel): Promise<void> {

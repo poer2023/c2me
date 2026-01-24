@@ -1,6 +1,6 @@
 import { Context, Telegraf } from 'telegraf';
 import { UserSessionModel } from '../../../models/user-session';
-import { UserState, PermissionMode } from '../../../models/types';
+import { UserState, PermissionMode, ClaudeMessage } from '../../../models/types';
 import { IStorage } from '../../../storage/interface';
 import { GitHubManager } from '../../github';
 import { MessageFormatter } from '../../../utils/formatter';
@@ -430,12 +430,12 @@ export class MessageHandler {
     }
   }
 
-  async handleRegularMessage(chatId: number, message: any, permissionMode?: PermissionMode): Promise<void> {
+  async handleRegularMessage(chatId: number, message: ClaudeMessage, permissionMode?: PermissionMode): Promise<void> {
     await this.sendFormattedMessage(chatId, message, permissionMode);
   }
 
 
-  async sendFormattedMessage(chatId: number, message: any, permissionMode?: PermissionMode): Promise<void> {
+  async sendFormattedMessage(chatId: number, message: ClaudeMessage, permissionMode?: PermissionMode): Promise<void> {
     try {
       const formattedMessage = await this.formatter.formatClaudeMessage(message, permissionMode);
       if (formattedMessage) {

@@ -1,4 +1,4 @@
-import { Context } from 'telegraf';
+import { Context, Telegraf } from 'telegraf';
 import { UserSessionModel } from '../../../models/user-session';
 import { UserState, PermissionMode } from '../../../models/types';
 import { IStorage } from '../../../storage/interface';
@@ -19,7 +19,7 @@ export class CommandHandler {
     private formatter: MessageFormatter,
     private claudeSDK: ClaudeManager,
     private config: Config,
-    private bot: any
+    private bot: Telegraf
   ) {
     this.authService = new AuthService(config);
     this.telegramSender = new TelegramSender(bot);

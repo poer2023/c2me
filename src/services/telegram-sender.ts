@@ -10,7 +10,7 @@ import { getMessageStore } from './message-store';
 export class TelegramSender {
   constructor(private bot: Telegraf) { }
 
-  async safeSendMessage(chatId: number, message: string, options: any = {}): Promise<any> {
+  async safeSendMessage(chatId: number, message: string, options: Record<string, unknown> = {}): Promise<{ message_id: number }> {
     const limit = 4096;
     const stopTimer = startTiming('telegram_send_time');
 
@@ -20,7 +20,7 @@ export class TelegramSender {
       await messageStore.captureOutgoing(chatId, message, 'text');
     }
 
-    let lastMessage: any;
+    let lastMessage: { message_id: number } | undefined;
     const parsed = markdownToTelegramEntities(message);
 
     const botEntities = parsed.entities
@@ -34,7 +34,7 @@ export class TelegramSender {
       msg,
       async ({ text, entities }) => {
         lastMessage = await this.bot.telegram.sendMessage(chatId, text, {
-          entities: entities as any,
+          entities: entities as TelegramMessageEntity[],
           ...options
         });
         incrementCounter('messages_sent');
@@ -44,10 +44,16 @@ export class TelegramSender {
     );
 
     stopTimer();
+
+    // Ensure we always return a valid message_id
+    // splitMessage should always call the callback at least once for non-empty messages
+    if (!lastMessage) {
+      throw new Error('Failed to send message: no message was sent');
+    }
     return lastMessage;
   }
 
-  async safeEditMessage(chatId: number, messageId: number, message: string, options: any = {}): Promise<any> {
+  async safeEditMessage(chatId: number, messageId: number, message: string, options: Record<string, unknown> = {}): Promise<{ message_id: number }> {
     const limit = 4096;
     const parsed = markdownToTelegramEntities(message);
     const botEntities = parsed.entities
@@ -109,9 +115,9 @@ function convert(
     length: e.length,
   } as TelegramMessageEntity;
 
-  if (type === 'text_link' && 'url' in e) (base as any).url = e.url;
-  if (type === 'pre' && 'language' in e) (base as any).language = e.language;
-  if (type === 'text_mention' && 'user' in e) (base as any).user = (e as any).user;
+  if (type === 'text_link' && 'url' in e) (base as TelegramMessageEntity & { url: string }).url = e.url;
+  if (type === 'pre' && 'language' in e) (base as TelegramMessageEntity & { language: string }).language = e.language;
+  if (type === 'text_mention' && 'user' in e) (base as TelegramMessageEntity & { user: unknown }).user = (e as MessageEntity & { user: unknown }).user;
 
   return base;
 }

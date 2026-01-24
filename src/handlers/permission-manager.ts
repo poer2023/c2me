@@ -20,7 +20,7 @@ interface PendingPermissionRequest {
   id: string;
   chatId: number;
   toolName: string;
-  input: any;
+  input: Record<string, unknown>;
   resolve: (approved: boolean) => void;
   reject: (error: Error) => void;
   timestamp: Date;
@@ -39,14 +39,14 @@ export class PermissionManager {
    */
   async canUseTool(toolName: string, input: Record<string, unknown>): Promise<PermissionResult> {
     // Extract chatId from input, this needs to be passed when calling
-    const chatId = (input as any).__chatId;
+    const chatId = (input as Record<string, unknown>).__chatId as number | undefined;
     if (!chatId) {
       return { behavior: 'deny', message: 'No chat ID provided for permission check' };
     }
 
     // Remove internal parameters
     const cleanInput = { ...input };
-    delete (cleanInput as any).__chatId;
+    delete (cleanInput as Record<string, unknown>).__chatId;
 
     return await this.requestUserPermission(chatId, toolName, cleanInput);
   }
@@ -54,7 +54,7 @@ export class PermissionManager {
   /**
    * Request permission from user
    */
-  private async requestUserPermission(chatId: number, toolName: string, input: any): Promise<PermissionResult> {
+  private async requestUserPermission(chatId: number, toolName: string, input: Record<string, unknown>): Promise<PermissionResult> {
     const requestId = this.generateRequestId();
 
     // Create Promise to wait for user response

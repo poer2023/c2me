@@ -1,4 +1,4 @@
-import { query, type Options, AbortError, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Options, AbortError, type SDKUserMessage, type SDKMessage, type SDKAssistantMessage } from '@anthropic-ai/claude-agent-sdk';
 import { IStorage } from '../storage/interface';
 import { TargetTool } from '../models/types';
 import { PermissionManager } from './permission-manager';
@@ -6,20 +6,46 @@ import { StreamManager } from '../utils/stream-manager';
 import { incrementCounter, startTiming, incrementGauge, decrementGauge } from '../utils/metrics';
 import { MessageContent } from '../utils/image-handler';
 import { logger } from '../utils/logger';
+import { UserSessionModel } from '../models/user-session';
+
+/** Tool info extracted from SDK messages */
+export interface ToolInfo {
+  toolId: string;
+  toolName: string;
+  isToolUse: boolean;
+  isToolResult: boolean;
+}
+
+/** Content block types from SDK messages */
+interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+}
+
+interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;
+  content?: string | unknown[];
+  is_error?: boolean;
+}
+
+type ContentBlock = { type: string } & Record<string, unknown>;
 
 export class ClaudeManager {
   private storage: IStorage;
   private permissionManager: PermissionManager;
   private streamManager = new StreamManager();
   private binaryPath: string | undefined;
-  private onClaudeResponse: (userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string) => Promise<void>;
+  private onClaudeResponse: (userId: string, message: SDKMessage | null, toolInfo?: ToolInfo, parentToolUseId?: string) => Promise<void>;
   private onClaudeError: (userId: string, error: string) => void;
 
   constructor(
     storage: IStorage,
     permissionManager: PermissionManager,
     callbacks: {
-      onClaudeResponse: (userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string) => Promise<void>;
+      onClaudeResponse: (userId: string, message: SDKMessage | null, toolInfo?: ToolInfo, parentToolUseId?: string) => Promise<void>;
       onClaudeError: (userId: string, error: string) => void;
     },
     binaryPath?: string
@@ -76,7 +102,8 @@ export class ClaudeManager {
       type: 'user',
       message: {
         role: 'user',
-        content: content as any // SDK accepts this format
+        // MessageContent[] is compatible with SDK content format
+        content: content as SDKUserMessage['message']['content']
       },
       parent_tool_use_id: null,
       session_id: ''
@@ -117,7 +144,7 @@ export class ClaudeManager {
 
         // Detect tool use and tool result in message content
         const toolInfo = this.extractToolInfo(message);
-        const parentToolUseId = (message as any).parent_tool_use_id || undefined;
+        const parentToolUseId = 'parent_tool_use_id' in message ? (message.parent_tool_use_id as string | undefined) : undefined;
 
         // Track tool usage
         if (toolInfo?.isToolUse) {
@@ -165,38 +192,49 @@ export class ClaudeManager {
     await this.storage.disconnect();
   }
 
-  private extractToolInfo(message: any): { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean } | undefined {
+  private extractToolInfo(message: SDKMessage): ToolInfo | undefined {
     const targetTools = Object.values(TargetTool);
 
-    // Check if message has content array
-    if (!message.message?.content || !Array.isArray(message.message.content)) {
+    // Check if message has content array (only assistant and user messages have this)
+    if (!('message' in message)) {
+      return undefined;
+    }
+
+    const msgWithContent = message as SDKAssistantMessage | SDKUserMessage;
+    if (!msgWithContent.message?.content || !Array.isArray(msgWithContent.message.content)) {
       return undefined;
     }
 
     // Check for tool_use in assistant messages
     if (message.type === 'assistant') {
-      for (const block of message.message.content) {
-        if (block.type === 'tool_use' && targetTools.includes(block.name)) {
-          return {
-            toolId: block.id,
-            toolName: block.name,
-            isToolUse: true,
-            isToolResult: false
-          };
+      for (const block of msgWithContent.message.content as ContentBlock[]) {
+        if (block.type === 'tool_use') {
+          const toolBlock = block as unknown as ToolUseBlock;
+          if (targetTools.includes(toolBlock.name as TargetTool)) {
+            return {
+              toolId: toolBlock.id,
+              toolName: toolBlock.name,
+              isToolUse: true,
+              isToolResult: false
+            };
+          }
         }
       }
     }
 
     // Check for tool_result in user messages
     if (message.type === 'user') {
-      for (const block of message.message.content) {
-        if (block.type === 'tool_result' && block.tool_use_id) {
-          return {
-            toolId: block.tool_use_id,
-            toolName: '', // We'll retrieve this from Redis
-            isToolUse: false,
-            isToolResult: true
-          };
+      for (const block of msgWithContent.message.content as ContentBlock[]) {
+        if (block.type === 'tool_result') {
+          const resultBlock = block as unknown as ToolResultBlock;
+          if (resultBlock.tool_use_id) {
+            return {
+              toolId: resultBlock.tool_use_id,
+              toolName: '', // We'll retrieve this from Redis
+              isToolUse: false,
+              isToolResult: true
+            };
+          }
         }
       }
     }
@@ -204,7 +242,7 @@ export class ClaudeManager {
     return undefined;
   }
 
-  private async startNewQuery(chatId: number, session: any): Promise<void> {
+  private async startNewQuery(chatId: number, session: UserSessionModel): Promise<void> {
     const stream = this.streamManager.getOrCreateStream(chatId);
     const controller = this.streamManager.getController(chatId)!;
     

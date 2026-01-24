@@ -72,9 +72,9 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
   const [metrics, setMetrics] = useState<BotMetrics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const fetchMetrics = async () => {
-    if (!isRunning) return;
     setLoading(true);
     try {
       const data = await invoke<BotMetrics>('fetch_metrics');
@@ -93,19 +93,24 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
   };
 
   useEffect(() => {
-    // Don't fetch if bot is not running
+    // First load: try to fetch regardless of isRunning (handles external bot case)
+    if (!initialLoadDone) {
+      fetchMetrics();
+      setInitialLoadDone(true);
+    }
+
+    // Don't set up polling if bot is not running
     if (!isRunning) {
-      setMetrics(null);
-      setError(null);
       return;
     }
 
-    fetchMetrics();
+    // Set up polling for subsequent fetches
     const interval = setInterval(fetchMetrics, 5000); // Refresh every 5 seconds
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, initialLoadDone]);
 
-  if (!isRunning) {
+  // Only show empty state if bot is not running AND we have no data (external bot case)
+  if (!isRunning && !metrics && !loading) {
     return (
       <div className="metrics-panel">
         <div className="metrics-empty">

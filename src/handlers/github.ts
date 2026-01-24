@@ -1,4 +1,4 @@
-import simpleGit, { SimpleGit } from 'simple-git';
+import simpleGit, { SimpleGit, StatusResult } from 'simple-git';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { RepoInfo } from '../models/types';
@@ -70,7 +70,7 @@ export class GitHubManager {
     }
   }
 
-  async getRepoStatus(localPath: string): Promise<any> {
+  async getRepoStatus(localPath: string): Promise<StatusResult> {
     try {
       const git: SimpleGit = simpleGit(localPath);
       return await git.status();

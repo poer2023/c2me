@@ -64,6 +64,13 @@ export function SettingsPage({ onClose }: SettingsPageProps) {
             ))}
           </div>
         </div>
+
+        {/* Version Info */}
+        <div className="settings-section">
+          <div className="settings-version">
+            Version: 1.7.0
+          </div>
+        </div>
       </div>
     </div>
   );

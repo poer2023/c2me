@@ -20,6 +20,34 @@ export interface CounterMetrics {
   rate_limit_hits: number;
 }
 
+/** Session mutex statistics */
+export interface MutexMetrics {
+  acquireCount: number;
+  waitCount: number;
+  totalWaitTimeMs: number;
+  avgWaitTimeMs: number;
+}
+
+/** Tool discovery metadata */
+export interface ToolDiscoveryMetrics {
+  extractedAt: string | null;
+  toolCount: number;
+  tools: string[];
+  slashCommands: string[];
+}
+
+/** Redis detailed metrics */
+export interface RedisMetrics {
+  cacheHitCount: number;
+  cacheMissCount: number;
+  cacheHitRate: number;
+  bufferSize: number;
+  bufferMaxSize: number;
+  bufferUtilization: number;
+  healthCheckStatus: 'ok' | 'fail' | 'unknown';
+  lastHealthCheck: string | null;
+}
+
 export interface HistogramData {
   values: number[];
   sum: number;
@@ -47,6 +75,13 @@ export interface MetricsSnapshot {
   histograms: Record<keyof HistogramMetrics, Omit<HistogramData, 'values'> & { p50: number; p95: number; p99: number }>;
   gauges: GaugeMetrics;
   timestamp: string;
+}
+
+/** Extended metrics snapshot including mutex, tool discovery, and Redis stats */
+export interface ExtendedMetricsSnapshot extends MetricsSnapshot {
+  mutex: MutexMetrics;
+  toolDiscovery: ToolDiscoveryMetrics;
+  redis: RedisMetrics;
 }
 
 // Default histogram data
@@ -98,6 +133,26 @@ class MetricsCollector {
     queue_size: 0,
     memory_usage_mb: 0,
     uptime_seconds: 0,
+  };
+
+  // Mutex metrics tracking
+  private mutexMetrics: MutexMetrics = {
+    acquireCount: 0,
+    waitCount: 0,
+    totalWaitTimeMs: 0,
+    avgWaitTimeMs: 0,
+  };
+
+  // Redis metrics tracking
+  private redisMetrics: RedisMetrics = {
+    cacheHitCount: 0,
+    cacheMissCount: 0,
+    cacheHitRate: 0,
+    bufferSize: 0,
+    bufferMaxSize: 100,
+    bufferUtilization: 0,
+    healthCheckStatus: 'unknown',
+    lastHealthCheck: null,
   };
 
   private startTime: number = Date.now();
@@ -167,6 +222,54 @@ class MetricsCollector {
     this.gauges.uptime_seconds = Math.floor((Date.now() - this.startTime) / 1000);
   }
 
+  // Mutex metrics operations
+  recordMutexAcquire(waitTimeMs: number = 0): void {
+    this.mutexMetrics.acquireCount++;
+    if (waitTimeMs > 0) {
+      this.mutexMetrics.waitCount++;
+      this.mutexMetrics.totalWaitTimeMs += waitTimeMs;
+      this.mutexMetrics.avgWaitTimeMs =
+        this.mutexMetrics.totalWaitTimeMs / this.mutexMetrics.waitCount;
+    }
+  }
+
+  getMutexMetrics(): MutexMetrics {
+    return { ...this.mutexMetrics };
+  }
+
+  // Redis metrics operations
+  recordCacheHit(): void {
+    this.redisMetrics.cacheHitCount++;
+    this.updateCacheHitRate();
+  }
+
+  recordCacheMiss(): void {
+    this.redisMetrics.cacheMissCount++;
+    this.updateCacheHitRate();
+  }
+
+  private updateCacheHitRate(): void {
+    const total = this.redisMetrics.cacheHitCount + this.redisMetrics.cacheMissCount;
+    this.redisMetrics.cacheHitRate = total > 0
+      ? Math.round((this.redisMetrics.cacheHitCount / total) * 100 * 100) / 100
+      : 0;
+  }
+
+  updateRedisBuffer(size: number, maxSize: number): void {
+    this.redisMetrics.bufferSize = size;
+    this.redisMetrics.bufferMaxSize = maxSize;
+    this.redisMetrics.bufferUtilization = Math.round((size / maxSize) * 100 * 100) / 100;
+  }
+
+  updateRedisHealthCheck(status: 'ok' | 'fail'): void {
+    this.redisMetrics.healthCheckStatus = status;
+    this.redisMetrics.lastHealthCheck = new Date().toISOString();
+  }
+
+  getRedisMetrics(): RedisMetrics {
+    return { ...this.redisMetrics };
+  }
+
   // Get snapshot of all metrics
   getSnapshot(): MetricsSnapshot {
     this.updateMemoryUsage();
@@ -192,6 +295,23 @@ class MetricsCollector {
       histograms: histogramStats,
       gauges: { ...this.gauges },
       timestamp: new Date().toISOString(),
+    };
+  }
+
+  // Get extended snapshot with mutex, tool discovery, and Redis metrics
+  getExtendedSnapshot(toolDiscovery?: ToolDiscoveryMetrics): ExtendedMetricsSnapshot {
+    const baseSnapshot = this.getSnapshot();
+
+    return {
+      ...baseSnapshot,
+      mutex: this.getMutexMetrics(),
+      toolDiscovery: toolDiscovery || {
+        extractedAt: null,
+        toolCount: 0,
+        tools: [],
+        slashCommands: [],
+      },
+      redis: this.getRedisMetrics(),
     };
   }
 
@@ -260,6 +380,31 @@ export function decrementGauge(gauge: keyof GaugeMetrics, value: number = 1): vo
 
 export function getMetricsSnapshot(): MetricsSnapshot {
   return metrics.getSnapshot();
+}
+
+// Extended metrics functions
+export function getExtendedMetricsSnapshot(toolDiscovery?: ToolDiscoveryMetrics): ExtendedMetricsSnapshot {
+  return metrics.getExtendedSnapshot(toolDiscovery);
+}
+
+export function recordMutexAcquire(waitTimeMs: number = 0): void {
+  metrics.recordMutexAcquire(waitTimeMs);
+}
+
+export function recordCacheHit(): void {
+  metrics.recordCacheHit();
+}
+
+export function recordCacheMiss(): void {
+  metrics.recordCacheMiss();
+}
+
+export function updateRedisBuffer(size: number, maxSize: number): void {
+  metrics.updateRedisBuffer(size, maxSize);
+}
+
+export function updateRedisHealthCheck(status: 'ok' | 'fail'): void {
+  metrics.updateRedisHealthCheck(status);
 }
 
 // Periodic metrics logging (optional)

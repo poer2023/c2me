@@ -90,7 +90,7 @@ export async function downloadTelegramImage(
   }
 
   // Construct download URL
-  const token = (bot.telegram as any).token;
+  const token = (bot.telegram as unknown as { token: string }).token;
   const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
 
   // Download the file
@@ -126,7 +126,7 @@ export async function saveImageLocally(
   }
 
   // Construct download URL
-  const token = (bot.telegram as any).token;
+  const token = (bot.telegram as unknown as { token: string }).token;
   const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
 
   // Download the file

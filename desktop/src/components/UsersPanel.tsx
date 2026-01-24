@@ -63,9 +63,9 @@ export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
 
   const fetchAnalytics = async () => {
-    if (!isRunning) return;
     setLoading(true);
     try {
       const data = await invoke<AnalyticsSnapshot>('fetch_analytics');
@@ -84,17 +84,21 @@ export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
   };
 
   useEffect(() => {
-    // Don't fetch if bot is not running
+    // First load: try to fetch regardless of isRunning (handles external bot case)
+    if (!initialLoadDone) {
+      fetchAnalytics();
+      setInitialLoadDone(true);
+    }
+
+    // Don't set up polling if bot is not running
     if (!isRunning) {
-      setAnalytics(null);
-      setError(null);
       return;
     }
 
-    fetchAnalytics();
+    // Set up polling for subsequent fetches
     const interval = setInterval(fetchAnalytics, 10000); // Refresh every 10 seconds
     return () => clearInterval(interval);
-  }, [isRunning]);
+  }, [isRunning, initialLoadDone]);
 
   // Filter users based on search query
   const filteredUsers = analytics?.recentUsers.filter(user => {
@@ -108,7 +112,8 @@ export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
     );
   }) || [];
 
-  if (!isRunning) {
+  // Only show empty state if bot is not running AND we have no data (external bot case)
+  if (!isRunning && !analytics && !loading) {
     return (
       <div className="users-panel">
         <div className="users-empty">

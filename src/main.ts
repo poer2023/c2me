@@ -12,6 +12,7 @@ import { PermissionManager } from './handlers/permission-manager';
 import { initMessageStore } from './services/message-store';
 import { getDefaultRateLimiter } from './utils/rate-limiter';
 import { logger } from './utils/logger';
+import { ClaudeMessage } from './models/types';
 
 // Phase 4: Rate limiter cleanup interval reference
 let rateLimiterCleanupInterval: NodeJS.Timeout | null = null;
@@ -53,7 +54,7 @@ async function main(): Promise<void> {
 
     // Initialize SDK manager with callback architecture
     const claudeSDK = new ClaudeManager(storage, permissionManager, {
-      onClaudeResponse: async (userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string) => {
+      onClaudeResponse: async (userId: string, message: ClaudeMessage | null, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string) => {
         await telegramHandler.handleClaudeResponse(userId, message, toolInfo, parentToolUseId);
       },
       onClaudeError: async (userId: string, error: string) => {

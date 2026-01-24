@@ -117,7 +117,7 @@ export class MessageAggregator {
   /**
    * Add a new step (tool use) to the aggregated message
    */
-  addStep(chatId: number, toolName: string, toolId: string, input?: any): void {
+  addStep(chatId: number, toolName: string, toolId: string, input?: Record<string, unknown>): void {
     const session = this.sessions.get(chatId);
     if (!session) return;
 
@@ -142,7 +142,7 @@ export class MessageAggregator {
   /**
    * Mark a step as completed
    */
-  completeStep(chatId: number, toolId: string, result?: any, isError: boolean = false): void {
+  completeStep(chatId: number, toolId: string, result?: unknown, isError: boolean = false): void {
     const session = this.sessions.get(chatId);
     if (!session) return;
 
@@ -388,7 +388,7 @@ export class MessageAggregator {
   /**
    * Format step summary based on tool type
    */
-  private formatStepSummary(toolName: string, input?: any): string {
+  private formatStepSummary(toolName: string, input?: Record<string, unknown>): string {
     switch (toolName) {
       case TargetTool.Read:
         return `Reading ${this.extractFileName(input?.file_path)}`;
@@ -418,7 +418,7 @@ export class MessageAggregator {
   /**
    * Format step details (for expandable sections)
    */
-  private formatStepDetails(toolName: string, input?: any): string | undefined {
+  private formatStepDetails(toolName: string, input?: Record<string, unknown>): string | undefined {
     switch (toolName) {
       case TargetTool.Bash:
         return input?.command;
@@ -432,7 +432,7 @@ export class MessageAggregator {
   /**
    * Update summary with result information
    */
-  private updateSummaryWithResult(toolName: string, summary: string, result: any): string {
+  private updateSummaryWithResult(toolName: string, summary: string, result: unknown): string {
     const content = typeof result === 'string' ? result : '';
 
     switch (toolName) {

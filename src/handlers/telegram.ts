@@ -1,5 +1,5 @@
-import { Telegraf } from 'telegraf';
-import { PermissionMode } from '../models/types';
+import { Telegraf, Context } from 'telegraf';
+import { PermissionMode, ClaudeMessage } from '../models/types';
 import { IStorage } from '../storage/interface';
 import { GitHubManager } from './github';
 import { DirectoryManager } from './directory';
@@ -107,7 +107,7 @@ export class TelegramHandler {
     this.setupHandlers();
   }
 
-  public async handleClaudeResponse(userId: string, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {
+  public async handleClaudeResponse(userId: string, message: ClaudeMessage | null, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {
     const chatId = parseInt(userId);
     if (isNaN(chatId)) return;
 
@@ -201,7 +201,7 @@ export class TelegramHandler {
   /**
    * Wrap handler with user activity tracking (Phase 3: async fire-and-forget)
    */
-  private async withTracking(ctx: any, command?: string, handler?: () => Promise<void>): Promise<void> {
+  private async withTracking(ctx: Context, command?: string, handler?: () => Promise<void>): Promise<void> {
     // Phase 3: Fire-and-forget activity tracking - don't block the main request
     if (ctx.chat && ctx.from) {
       this.trackActivityAsync(ctx, command).catch((error) => {
@@ -218,7 +218,7 @@ export class TelegramHandler {
   /**
    * Async activity tracking - runs in background without blocking requests
    */
-  private async trackActivityAsync(ctx: any, command?: string): Promise<void> {
+  private async trackActivityAsync(ctx: Context, command?: string): Promise<void> {
     const update: {
       chatId: number;
       username?: string;
@@ -239,7 +239,7 @@ export class TelegramHandler {
     await this.storage.trackUserActivity(update);
   }
 
-  public async handleClaudeMessage(chatId: number, message: any, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {
+  public async handleClaudeMessage(chatId: number, message: ClaudeMessage, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {
     const user = await this.storage.getUserSession(chatId);
     if (!user || !user.sessionId) return;
 

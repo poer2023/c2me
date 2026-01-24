@@ -6,7 +6,55 @@ import fs from 'node:fs/promises';
 
 type Edit = { old_string: string; new_string: string; replace_all?: boolean };
 
+/**
+ * Box-drawing characters for terminal-style output
+ */
+const BOX = {
+  topLeft: '╭',
+  topRight: '╮',
+  bottomLeft: '╰',
+  bottomRight: '╯',
+  horizontal: '─',
+  vertical: '│',
+  teeRight: '├',
+  teeLeft: '┤',
+  corner: '└',
+  bullet: '●',
+  subBullet: '○',
+} as const;
+
 export class MessageFormatter {
+
+  /**
+   * Format message in terminal style with box-drawing characters
+   */
+  formatTerminalBox(title: string, content: string, width: number = 40): string {
+    const titleLine = `${BOX.topLeft}${BOX.horizontal} ${title} ${BOX.horizontal.repeat(Math.max(0, width - title.length - 4))}${BOX.topRight}`;
+    const lines = content.split('\n').map(line =>
+      `${BOX.vertical} ${line.padEnd(width - 2)}${BOX.vertical}`
+    );
+    const bottomLine = `${BOX.bottomLeft}${BOX.horizontal.repeat(width)}${BOX.bottomRight}`;
+
+    return [titleLine, ...lines, bottomLine].join('\n');
+  }
+
+  /**
+   * Format tool step in terminal style
+   */
+  formatToolStep(toolName: string, target: string, details?: string): string {
+    let result = `${BOX.bullet} ${toolName} ${target}`;
+    if (details) {
+      result += `\n  ${BOX.corner}${BOX.horizontal} ${details}`;
+    }
+    return result;
+  }
+
+  /**
+   * Format as monospace code block for Telegram
+   */
+  formatAsMonospace(content: string): string {
+    return `\`\`\`\n${content}\n\`\`\``;
+  }
 
   /**
    * Wrap content in expandable blockquote (>>> prefix for each line)
@@ -322,7 +370,7 @@ export class MessageFormatter {
     }
   }
 
-  async formatToolUse(toolName: string, input?: any, rawDiff: boolean = true): Promise<string> {
+  async formatToolUse(toolName: string, input?: Record<string, unknown>, rawDiff: boolean = true): Promise<string> {
     const targetTools = Object.values(TargetTool);
 
     if (!targetTools.includes(toolName as TargetTool)) {
@@ -405,7 +453,7 @@ export class MessageFormatter {
     }
   }
 
-  formatToolResult(toolName: string, content: any, isError: boolean = false): string {
+  formatToolResult(toolName: string, content: unknown, isError: boolean = false): string {
     const targetTools = Object.values(TargetTool);
 
     if (!targetTools.includes(toolName as TargetTool)) {
@@ -483,7 +531,7 @@ export class MessageFormatter {
     }
   }
 
-  private extractFileCount(content: any): string {
+  private extractFileCount(content: unknown): string {
     if (typeof content === 'string') {
       const lines = content.split('\n').filter(line => line.trim());
       return lines.length.toString();
@@ -491,7 +539,7 @@ export class MessageFormatter {
     return 'some';
   }
 
-  private extractMatchCount(content: any): string {
+  private extractMatchCount(content: unknown): string {
     if (typeof content === 'string') {
       const lines = content.split('\n').filter(line => line.trim());
       return lines.length.toString();
@@ -499,7 +547,7 @@ export class MessageFormatter {
     return 'some';
   }
 
-  private formatTodoWriteLoading(input: any): string {
+  private formatTodoWriteLoading(input: Record<string, unknown> | undefined): string {
     if (!input?.todos || !Array.isArray(input.todos)) {
       return '📝 Managing tasks...\n';
     }
@@ -519,7 +567,7 @@ export class MessageFormatter {
     return result;
   }
 
-  private formatTodoWriteResult(_content: any): string {
+  private formatTodoWriteResult(_content: unknown): string {
     // For now, just show completion message
     // In the future, could parse the result to show what changed
     return '✅ **Tasks Updated**\n';

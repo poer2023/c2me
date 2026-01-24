@@ -11,6 +11,10 @@ export enum ProjectType {
   Directory = 'directory',
 }
 
+/**
+ * Default target tools - used as fallback when dynamic discovery is unavailable
+ * These are the most commonly intercepted tools for UI display
+ */
 export enum TargetTool {
   Task = 'Task',
   Bash = 'Bash',
@@ -23,6 +27,16 @@ export enum TargetTool {
   MultiEdit = 'MultiEdit',
   Write = 'Write',
   TodoWrite = 'TodoWrite',
+}
+
+/** All known tool names as a union type */
+export type ToolName = TargetTool | string;
+
+/**
+ * Check if a tool name is a known target tool
+ */
+export function isTargetTool(toolName: string): toolName is TargetTool {
+  return Object.values(TargetTool).includes(toolName as TargetTool);
 }
 
 /**
@@ -110,4 +124,22 @@ export interface FileBrowsingState {
   totalItems: number;
   items: DirectoryItem[];
   messageId?: number;
+}
+
+export interface ClaudeMessageContent {
+  type: string;
+  text?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+  tool_use_id?: string;
+  content?: string | ClaudeMessageContent[];
+}
+
+export interface ClaudeMessage {
+  message?: {
+    content?: ClaudeMessageContent[];
+    role?: string;
+  };
+  type?: string;
+  content?: string | ClaudeMessageContent[];
 }
