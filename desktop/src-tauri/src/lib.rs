@@ -1,18 +1,18 @@
 use serde::Serialize;
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use tauri::{
-    menu::{Menu, MenuBuilder, MenuItem, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder},
+    menu::{Menu, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder},
     tray::TrayIconBuilder,
     AppHandle, Emitter, Manager, RunEvent, State, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 use tauri_plugin_notification::NotificationExt;
-use log::{info, warn, error};
+use log::{info, error};
 
 // Get or create a shared HTTP client for metrics/analytics requests
 fn get_http_client() -> reqwest::Client {
@@ -86,7 +86,6 @@ fn stop_bot_internal(state: &BotState) -> Result<String, String> {
         // Try graceful shutdown first (SIGTERM equivalent)
         #[cfg(unix)]
         {
-            use std::os::unix::process::CommandExt;
             let _ = Command::new("kill")
                 .args(["-TERM", &child.id().to_string()])
                 .spawn();
@@ -155,7 +154,7 @@ async fn get_bot_status(state: State<'_, BotState>) -> Result<BotStatus, String>
 
 // Internal function for starting bot (used by both command and tray menu)
 fn start_bot_internal(
-    app: AppHandle,
+    _app: AppHandle,
     state: &BotState,
     project_path: String,
 ) -> Result<String, String> {
@@ -899,7 +898,7 @@ pub fn run() {
                     "dashboard" => {
                         #[cfg(target_os = "macos")]
                         {
-                            app.set_activation_policy(tauri::ActivationPolicy::Regular);
+                            let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
                         }
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
@@ -1190,7 +1189,7 @@ pub fn run() {
                         // Switch back to accessory mode (hide from dock)
                         #[cfg(target_os = "macos")]
                         {
-                            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                            let _ = app.set_activation_policy(tauri::ActivationPolicy::Accessory);
                         }
                     }
                 }
