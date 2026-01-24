@@ -17,8 +17,8 @@ use log::{info, warn, error};
 // Get or create a shared HTTP client for metrics/analytics requests
 fn get_http_client() -> reqwest::Client {
     reqwest::Client::builder()
-        .timeout(Duration::from_millis(500))  // Fast timeout - bot is local
-        .connect_timeout(Duration::from_millis(200))
+        .timeout(Duration::from_secs(5))      // Increased from 3s for reliability
+        .connect_timeout(Duration::from_secs(2))  // Increased from 1s
         .build()
         .expect("Failed to create HTTP client")
 }
@@ -111,23 +111,46 @@ fn stop_bot_internal(state: &BotState) -> Result<String, String> {
 // Commands
 
 #[tauri::command]
-fn get_bot_status(state: State<BotState>) -> BotStatus {
-    let process = state.process.lock().unwrap();
-    let start_time = state.start_time.lock().unwrap();
+async fn get_bot_status(state: State<'_, BotState>) -> Result<BotStatus, String> {
+    let (mut is_running, uptime_seconds, pid) = {
+        let process = state.process.lock().unwrap();
+        let start_time = state.start_time.lock().unwrap();
 
-    let is_running = process.is_some();
-    let uptime_seconds = if let Some(start) = *start_time {
-        start.elapsed().as_secs()
-    } else {
-        0
+        let is_running = process.is_some();
+        let uptime_seconds = if let Some(start) = *start_time {
+            start.elapsed().as_secs()
+        } else {
+            0
+        };
+        let pid = process.as_ref().map(|p| p.id());
+
+        (is_running, uptime_seconds, pid)
     };
-    let pid = process.as_ref().map(|p| p.id());
+    // Locks are dropped here before async operation
 
-    BotStatus {
+    // If no Tauri-managed process, check if external bot is running on port 3002
+    if !is_running {
+        let client = get_http_client();
+        match client
+            .get("http://127.0.0.1:3002/metrics")
+            .send()
+            .await
+        {
+            Ok(response) => {
+                is_running = response.status().is_success();
+                info!("External bot check: is_running={}", is_running);
+            }
+            Err(e) => {
+                error!("External bot check failed: {}", e);
+            }
+        }
+    }
+
+    Ok(BotStatus {
         is_running,
         uptime_seconds,
         pid,
-    }
+    })
 }
 
 // Internal function for starting bot (used by both command and tray menu)
@@ -359,13 +382,23 @@ pub struct AnalyticsSnapshot {
 
 #[tauri::command]
 async fn fetch_analytics() -> Result<serde_json::Value, String> {
-    // Use shared HTTP client with fast timeout (async to not block UI)
+    info!("fetch_analytics: attempting to connect to 127.0.0.1:3002");
     let client = get_http_client();
-    let response = client
-        .get("http://localhost:3002/analytics")
+
+    let response = match client
+        .get("http://127.0.0.1:3002/analytics")
         .send()
         .await
-        .map_err(|e| format!("Failed to fetch analytics: {}", e))?;
+    {
+        Ok(resp) => {
+            info!("fetch_analytics: got response with status {}", resp.status());
+            resp
+        }
+        Err(e) => {
+            error!("fetch_analytics: request failed: {}", e);
+            return Err(format!("Failed to fetch analytics: {}", e));
+        }
+    };
 
     if !response.status().is_success() {
         return Err(format!("Analytics endpoint returned status: {}", response.status()));
@@ -379,13 +412,23 @@ async fn fetch_analytics() -> Result<serde_json::Value, String> {
 
 #[tauri::command]
 async fn fetch_metrics() -> Result<BotMetrics, String> {
-    // Use shared HTTP client with fast timeout (async to not block UI)
+    info!("fetch_metrics: attempting to connect to 127.0.0.1:3002");
     let client = get_http_client();
-    let response = client
-        .get("http://localhost:3002/metrics")
+
+    let response = match client
+        .get("http://127.0.0.1:3002/metrics")
         .send()
         .await
-        .map_err(|e| format!("Failed to fetch metrics: {}", e))?;
+    {
+        Ok(resp) => {
+            info!("fetch_metrics: got response with status {}", resp.status());
+            resp
+        }
+        Err(e) => {
+            error!("fetch_metrics: request failed: {}", e);
+            return Err(format!("Failed to fetch metrics: {}", e));
+        }
+    };
 
     if !response.status().is_success() {
         return Err(format!("Metrics endpoint returned status: {}", response.status()));
@@ -405,6 +448,36 @@ async fn fetch_metrics() -> Result<BotMetrics, String> {
             .unwrap_or("")
             .to_string(),
     })
+}
+
+#[tauri::command]
+async fn fetch_extended_metrics() -> Result<serde_json::Value, String> {
+    info!("fetch_extended_metrics: attempting to connect to 127.0.0.1:3002");
+    let client = get_http_client();
+
+    let response = match client
+        .get("http://127.0.0.1:3002/metrics/extended")
+        .send()
+        .await
+    {
+        Ok(resp) => {
+            info!("fetch_extended_metrics: got response with status {}", resp.status());
+            resp
+        }
+        Err(e) => {
+            error!("fetch_extended_metrics: request failed: {}", e);
+            return Err(format!("Failed to fetch extended metrics: {}", e));
+        }
+    };
+
+    if !response.status().is_success() {
+        return Err(format!("Extended metrics endpoint returned status: {}", response.status()));
+    }
+
+    response
+        .json::<serde_json::Value>()
+        .await
+        .map_err(|e| format!("Failed to parse extended metrics JSON: {}", e))
 }
 
 // Setup and dependency management
@@ -1088,6 +1161,7 @@ pub fn run() {
             get_autostart_enabled,
             set_autostart_enabled,
             fetch_metrics,
+            fetch_extended_metrics,
             fetch_analytics,
             // Setup wizard commands
             check_prerequisites,
