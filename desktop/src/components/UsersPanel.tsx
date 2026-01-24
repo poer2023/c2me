@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface UserActivitySummary {
@@ -64,26 +64,37 @@ export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const isMountedRef = useRef(true);
 
-  const fetchAnalytics = async () => {
+  const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     try {
       const data = await invoke<AnalyticsSnapshot>('fetch_analytics');
-      setAnalytics(data);
-      setError(null);
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setAnalytics(data);
+        setError(null);
+      }
     } catch (err) {
-      // Show friendly error message instead of technical details
-      const errStr = `${err}`;
-      if (errStr.includes('error sending request') || errStr.includes('connection')) {
-        setError('正在连接机器人服务...');
-      } else {
-        setError('获取数据失败，请稍后重试');
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        // Show friendly error message instead of technical details
+        const errStr = `${err}`;
+        if (errStr.includes('error sending request') || errStr.includes('connection')) {
+          setError('正在连接机器人服务...');
+        } else {
+          setError('获取数据失败，请稍后重试');
+        }
       }
     }
-    setLoading(false);
-  };
+    if (isMountedRef.current) {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     // First load: try to fetch regardless of isRunning (handles external bot case)
     if (!initialLoadDone) {
       fetchAnalytics();
@@ -92,13 +103,18 @@ export function UsersPanel({ isRunning, onStartBot }: UsersPanelProps) {
 
     // Don't set up polling if bot is not running
     if (!isRunning) {
-      return;
+      return () => {
+        isMountedRef.current = false;
+      };
     }
 
     // Set up polling for subsequent fetches
     const interval = setInterval(fetchAnalytics, 10000); // Refresh every 10 seconds
-    return () => clearInterval(interval);
-  }, [isRunning, initialLoadDone]);
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(interval);
+    };
+  }, [isRunning, initialLoadDone, fetchAnalytics]);
 
   // Filter users based on search query
   const filteredUsers = analytics?.recentUsers.filter(user => {
