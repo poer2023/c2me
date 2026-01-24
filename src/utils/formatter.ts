@@ -96,15 +96,16 @@ export class MessageFormatter {
     return `ℹ️ ${format.bold('Info')}: ${format.escape(message)}`;
   }
 
-  async formatClaudeMessage(message: SDKMessage, permissionMode?: PermissionMode): Promise<string> {
+  async formatClaudeMessage(message: SDKMessage | { type?: string; message?: { content?: unknown[]; role?: string }; content?: unknown }, permissionMode?: PermissionMode): Promise<string> {
     // Format based on SDK message type
-    switch (message.type) {
+    const msgType = message.type;
+    switch (msgType) {
       case 'assistant':
-        return await this.formatAssistantMessage(message, permissionMode);
+        return await this.formatAssistantMessage(message as SDKAssistantMessage, permissionMode);
       case 'user':
-        return await this.formatUserMessage(message);
+        return await this.formatUserMessage(message as SDKUserMessage);
       case 'result':
-        return this.formatResultMessage(message);
+        return this.formatResultMessage(message as SDKResultMessage);
       case 'system':
         return this.formatSystemMessage(message as SDKSystemMessage);
       // New message types added in claude-agent-sdk
@@ -113,7 +114,7 @@ export class MessageFormatter {
       case 'auth_status':
         return ''; // Skip these internal SDK messages
       default:
-        return this.formatGenericMessage(message);
+        return this.formatGenericMessage(message as SDKMessage);
     }
   }
 
@@ -387,14 +388,14 @@ export class MessageFormatter {
       case TargetTool.TodoWrite:
         return this.formatTodoWriteLoading(input);
       case TargetTool.Read:
-        const fileName = input?.file_path ? input.file_path.split('/').pop() : 'file';
+        const fileName = input?.file_path ? (input.file_path as string).split('/').pop() : 'file';
         return `📖 **Reading** ${fileName} `;
       case TargetTool.Write:
-        const writeFile = input?.file_path ? input.file_path.split('/').pop() : 'file';
+        const writeFile = input?.file_path ? (input.file_path as string).split('/').pop() : 'file';
         let writeResult = `✍️ **Writing** ${writeFile}\n`;
         if (rawDiff) {
           if (input?.content) {
-            const content = input.content;
+            const content = input.content as string;
             const lines = content.split('\n');
             const previewLines = lines.slice(0, 10); // Show first 10 lines
             writeResult += `\`\`\`\n${previewLines.join('\n')}`;
@@ -406,26 +407,26 @@ export class MessageFormatter {
         }
         return writeResult;
       case TargetTool.Glob:
-        const pattern = input?.pattern || 'files';
+        const pattern = (input?.pattern as string) || 'files';
         return `🔍 **Use Glob** Searching for ${pattern} `;
       case TargetTool.Edit:
-        const editFile = input?.file_path ? input.file_path.split('/').pop() : 'file';
+        const editFile = input?.file_path ? (input.file_path as string).split('/').pop() : 'file';
         let result = `✏️ **Editing** ${editFile}\n`;
         if (rawDiff) {
           if (input?.file_path && input?.old_string && input?.new_string) {
-            result += this.formatEditAsDiff(input.file_path, input.old_string, input.new_string, true);
+            result += this.formatEditAsDiff(input.file_path as string, input.old_string as string, input.new_string as string, true);
           }
         }
 
         return result;
       case TargetTool.MultiEdit:
-        const multiEditFile = input?.file_path ? input.file_path.split('/').pop() : 'file';
+        const multiEditFile = input?.file_path ? (input.file_path as string).split('/').pop() : 'file';
         let multiResult = `✏️ **MultiEdit** ${multiEditFile}\n`;
 
         if (rawDiff) {
           if (input?.file_path && input?.edits && Array.isArray(input.edits)) {
             try {
-              const diffText = await this.formatMultiEditResult(input.file_path, input.edits, true);
+              const diffText = await this.formatMultiEditResult(input.file_path as string, input.edits as Edit[], true);
               multiResult += diffText;
             } catch {
               multiResult += '⚠️ Could not generate diff preview\n';
@@ -434,19 +435,19 @@ export class MessageFormatter {
         }
         return multiResult;
       case TargetTool.LS:
-        const dir = input?.path ? input.path.split('/').pop() || 'directory' : 'directory';
+        const dir = input?.path ? (input.path as string).split('/').pop() || 'directory' : 'directory';
         return `📁 **Listing** ${dir} `;
       case TargetTool.Grep:
-        const searchPattern = input?.pattern || 'content';
+        const searchPattern = (input?.pattern as string) || 'content';
         return `🔎 **Use Grep** Searching for "${searchPattern}" `;
       case TargetTool.Bash:
-        const command = input?.command;
+        const command = input?.command as string;
         return `⚡ **Running** ${command}\n`;
       case TargetTool.Task:
-        const description = input?.description || 'task';
+        const description = (input?.description as string) || 'task';
         return `🤖 **Task** Starting ${description}\n`;
       case TargetTool.ExitPlanMode:
-        const plan = input?.plan || 'No plan provided';
+        const plan = (input?.plan as string) || 'No plan provided';
         return `📋 **Plan Mode**\n\n${plan}\n`;
       default:
         return `🔧 **Tool use**: \`${toolName}\`\n`;

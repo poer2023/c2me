@@ -99,12 +99,12 @@ export class ToolHandler {
 
     // Update progress status with current tool
     if (this.progressManager) {
-      this.progressManager.updateTool(chatId, toolInfo.toolName, input);
+      this.progressManager.updateTool(chatId, toolInfo.toolName, input ?? undefined);
     }
 
     // If aggregation is active, add step to aggregator
     if (this.useAggregator && this.aggregator.hasSession(chatId)) {
-      this.aggregator.addStep(chatId, toolInfo.toolName, toolInfo.toolId, input);
+      this.aggregator.addStep(chatId, toolInfo.toolName, toolInfo.toolId, input ?? undefined);
 
       // For high visibility tools with workers enabled, still handle diff specially
       const visibility = getToolVisibilityLevel(toolInfo.toolName);
@@ -176,11 +176,11 @@ export class ToolHandler {
     }
 
     // Extract input parameters from message
-    let input: Record<string, unknown> | null = null;
+    let input: Record<string, unknown> | undefined = undefined;
     if (message.message?.content) {
       for (const content of message.message.content) {
         if (content.type === 'tool_use' && content.name === toolName) {
-          input = content.input;
+          input = content.input ?? undefined;
           break;
         }
       }
@@ -189,15 +189,15 @@ export class ToolHandler {
     return await this.formatter.formatToolUse(toolName, input, rawDiff);
   }
 
-  private extractToolInput(message: ClaudeMessage, toolName: string): Record<string, unknown> | null {
-    if (!message.message?.content) return null;
+  private extractToolInput(message: ClaudeMessage, toolName: string): Record<string, unknown> | undefined {
+    if (!message.message?.content) return undefined;
 
     for (const content of message.message.content) {
       if (content.type === 'tool_use' && content.name === toolName) {
-        return content.input;
+        return content.input ?? undefined;
       }
     }
-    return null;
+    return undefined;
   }
 
   private async sendToolLoadingMessage(chatId: number, loadingMessage: string, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId?: string): Promise<void> {
@@ -310,7 +310,7 @@ export class ToolHandler {
         if (content.type === 'tool_result') {
           return {
             content: content.content,
-            isError: content.is_error || false
+            isError: (content as unknown as { is_error?: boolean }).is_error || false
           };
         }
       }
@@ -318,7 +318,7 @@ export class ToolHandler {
     return { content: '', isError: false };
   }
 
-  private async handleDiffToolUse(chatId: number, message: ClaudeMessage, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId: string | undefined, input: Record<string, unknown> | null): Promise<void> {
+  private async handleDiffToolUse(chatId: number, message: ClaudeMessage, toolInfo: ToolInfo, user: UserSessionModel, parentToolUseId: string | undefined, input: Record<string, unknown> | undefined): Promise<void> {
 
     try {
       // Generate diff patch from input
@@ -380,7 +380,7 @@ export class ToolHandler {
     }
   }
 
-  private async generateDiffPatch(toolName: string, input: Record<string, unknown> | null): Promise<string | null> {
+  private async generateDiffPatch(toolName: string, input: Record<string, unknown> | undefined): Promise<string | null> {
     if (!input) {
       return null;
     }
@@ -390,7 +390,12 @@ export class ToolHandler {
         return null;
       }
 
-      const diffText = this.formatter.formatEditAsDiff(input.file_path, input.old_string, input.new_string, false);
+      const diffText = this.formatter.formatEditAsDiff(
+        input.file_path as string,
+        input.old_string as string,
+        input.new_string as string,
+        false
+      );
       // Remove markdown formatting for raw patch
       return diffText.replace(/```diff\n/, '').replace(/```$/, '');
     }
@@ -401,7 +406,11 @@ export class ToolHandler {
       }
 
       try {
-        const diffText = await this.formatter.formatMultiEditResult(input.file_path, input.edits, false);
+        const diffText = await this.formatter.formatMultiEditResult(
+          input.file_path as string,
+          input.edits as Array<{ old_string: string; new_string: string; replace_all?: boolean }>,
+          false
+        );
         // Remove markdown formatting for raw patch
         return diffText.replace(/```diff\n/, '').replace(/```$/, '');
       } catch (error) {
@@ -416,7 +425,12 @@ export class ToolHandler {
       }
 
       // For Write tool, generate diff showing the new file content
-      const diffText = this.formatter.formatEditAsDiff(input.file_path, '', input.content, false);
+      const diffText = this.formatter.formatEditAsDiff(
+        input.file_path as string,
+        '',
+        input.content as string,
+        false
+      );
       // Remove markdown formatting for raw patch
       return diffText.replace(/```diff\n/, '').replace(/```$/, '');
     }

@@ -219,6 +219,8 @@ export class TelegramHandler {
    * Async activity tracking - runs in background without blocking requests
    */
   private async trackActivityAsync(ctx: Context, command?: string): Promise<void> {
+    if (!ctx.chat || !ctx.from) return;
+
     const update: {
       chatId: number;
       username?: string;

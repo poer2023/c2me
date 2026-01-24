@@ -391,23 +391,23 @@ export class MessageAggregator {
   private formatStepSummary(toolName: string, input?: Record<string, unknown>): string {
     switch (toolName) {
       case TargetTool.Read:
-        return `Reading ${this.extractFileName(input?.file_path)}`;
+        return `Reading ${this.extractFileName(input?.file_path as string | undefined)}`;
       case TargetTool.Write:
-        return `Writing ${this.extractFileName(input?.file_path)}`;
+        return `Writing ${this.extractFileName(input?.file_path as string | undefined)}`;
       case TargetTool.Edit:
       case TargetTool.MultiEdit:
-        return `Editing ${this.extractFileName(input?.file_path)}`;
+        return `Editing ${this.extractFileName(input?.file_path as string | undefined)}`;
       case TargetTool.Glob:
-        return `Searching for ${input?.pattern || 'files'}`;
+        return `Searching for ${(input?.pattern as string) || 'files'}`;
       case TargetTool.Grep:
-        return `Searching "${input?.pattern || 'content'}"`;
+        return `Searching "${(input?.pattern as string) || 'content'}"`;
       case TargetTool.LS:
-        return `Listing ${this.extractFileName(input?.path) || 'directory'}`;
+        return `Listing ${this.extractFileName(input?.path as string | undefined) || 'directory'}`;
       case TargetTool.Bash:
-        const cmd = input?.command || 'command';
+        const cmd = (input?.command as string) || 'command';
         return `Running ${cmd.slice(0, 30)}${cmd.length > 30 ? '...' : ''}`;
       case TargetTool.Task:
-        return `Starting ${input?.description || 'task'}`;
+        return `Starting ${(input?.description as string) || 'task'}`;
       case TargetTool.TodoWrite:
         return 'Managing tasks';
       default:
@@ -421,9 +421,9 @@ export class MessageAggregator {
   private formatStepDetails(toolName: string, input?: Record<string, unknown>): string | undefined {
     switch (toolName) {
       case TargetTool.Bash:
-        return input?.command;
+        return input?.command as string | undefined;
       case TargetTool.Grep:
-        return `Pattern: ${input?.pattern}, Path: ${input?.path || '.'}`;
+        return `Pattern: ${input?.pattern}, Path: ${(input?.path as string) || '.'}`;
       default:
         return undefined;
     }

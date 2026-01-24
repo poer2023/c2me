@@ -163,7 +163,7 @@ export class FileBrowserHandler {
       await this.telegramSender.safeSendMessage(
         chatId,
         `📄 **${fileName}**\n\nClick the button below to view file content`,
-        keyboard
+        { ...keyboard }
       );
     } catch (error) {
       await this.bot.telegram.sendMessage(chatId, this.formatter.formatError(`File processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`), { parse_mode: 'MarkdownV2' });
@@ -275,7 +275,7 @@ export class FileBrowserHandler {
     const message = this.formatDirectoryMessage(browsingState);
     const keyboard = KeyboardFactory.createDirectoryKeyboard(browsingState);
 
-    const sentMessage = await this.telegramSender.safeSendMessage(chatId, message, keyboard);
+    const sentMessage = await this.telegramSender.safeSendMessage(chatId, message, { ...keyboard });
 
     // Update browsing state with message ID
     const updatedState = { ...browsingState, messageId: sentMessage.message_id };
@@ -287,7 +287,7 @@ export class FileBrowserHandler {
     const keyboard = KeyboardFactory.createDirectoryKeyboard(browsingState);
 
     try {
-      await this.telegramSender.safeEditMessage(chatId, messageId, message, keyboard);
+      await this.telegramSender.safeEditMessage(chatId, messageId, message, { ...keyboard });
     } catch {
       // If edit fails, send new message
       await this.sendDirectoryListing(chatId, browsingState);

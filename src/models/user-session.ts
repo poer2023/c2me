@@ -150,19 +150,21 @@ export class UserSessionModel {
   }
 
   static fromJSON(data: Record<string, unknown>): UserSessionModel {
-    const userSession = new UserSessionModel(data.chatId);
-    userSession.state = data.state;
-    userSession.lastActivity = new Date(data.lastActivity);
+    const userSession = new UserSessionModel(data.chatId as number);
+    userSession.state = data.state as UserState;
+    userSession.lastActivity = new Date(data.lastActivity as string | number);
     
-    userSession.activeProject = data.activeProject || '';
+    userSession.activeProject = (data.activeProject as string) || '';
     if (data.sessionId) {
-      userSession.sessionId = data.sessionId;
+      userSession.sessionId = data.sessionId as string;
     }
-    userSession.projectPath = data.projectPath || '';
-    userSession.active = data.active || false;
-    userSession.permissionMode = data.permissionMode || PermissionMode.Default;
-    userSession.fileBrowsingState = data.fileBrowsingState;
-    userSession.authenticated = data.authenticated || false;
+    userSession.projectPath = (data.projectPath as string) || '';
+    userSession.active = (data.active as boolean) || false;
+    userSession.permissionMode = (data.permissionMode as PermissionMode) || PermissionMode.Default;
+    if (data.fileBrowsingState) {
+      userSession.fileBrowsingState = data.fileBrowsingState as FileBrowsingState;
+    }
+    userSession.authenticated = (data.authenticated as boolean) || false;
     
     return userSession;
   }

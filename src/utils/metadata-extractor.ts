@@ -79,8 +79,8 @@ async function doExtractMetadata(binaryPath?: string, timeout: number = 10000): 
 
     for await (const message of sdkQuery) {
       // SDK sends 'system' message with subtype 'init' containing tools
-      if (message.type === 'system' && 'subtype' in message && message.subtype === 'init') {
-        const initMessage = message as {
+      if (message.type === 'system' && 'subtype' in message && (message as { subtype?: string }).subtype === 'init') {
+        const initMessage = message as unknown as {
           type: 'system';
           subtype: 'init';
           tools?: Array<{ name: string; description?: string }>;
@@ -91,7 +91,7 @@ async function doExtractMetadata(binaryPath?: string, timeout: number = 10000): 
         if (initMessage.tools) {
           metadata.tools = initMessage.tools.map(t => ({
             name: t.name,
-            description: t.description
+            description: t.description ?? ''
           }));
         }
 

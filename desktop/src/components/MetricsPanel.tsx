@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 
 interface CounterMetrics {
@@ -79,13 +79,11 @@ export function MetricsPanel({ isRunning, onStartBot }: MetricsPanelProps) {
     setLoading(true);
     try {
       const data = await invoke<BotMetrics>('fetch_metrics');
-      // Only update state if component is still mounted
       if (isMountedRef.current) {
         setMetrics(data);
         setError(null);
       }
     } catch (err) {
-      // Only update state if component is still mounted
       if (isMountedRef.current) {
         // Show friendly error message instead of technical details
         const errStr = `${err}`;
