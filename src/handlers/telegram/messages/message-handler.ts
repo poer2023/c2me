@@ -359,13 +359,23 @@ export class MessageHandler {
     let expandedText = text;
     const fileContents: string[] = [];
 
+    // Normalize project path for comparison
+    const normalizedProjectPath = path.resolve(projectPath);
+
     for (const match of matches) {
       const filePath = match[1];
       if (!filePath) continue;
 
-      const fullPath = path.isAbsolute(filePath)
-        ? filePath
-        : path.join(projectPath, filePath);
+      // Resolve the full path and normalize it
+      const fullPath = path.resolve(
+        path.isAbsolute(filePath) ? filePath : path.join(projectPath, filePath)
+      );
+
+      // Security check: ensure the resolved path is within the project directory
+      if (!fullPath.startsWith(normalizedProjectPath + path.sep) && fullPath !== normalizedProjectPath) {
+        console.warn(`Path traversal attempt blocked: ${filePath} resolves to ${fullPath}`);
+        continue;
+      }
 
       try {
         if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {

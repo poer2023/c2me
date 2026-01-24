@@ -114,7 +114,7 @@ export class CommandHandler {
       const projectName = project?.name || 'Unknown Project';
       
       // Clean up active streams before ending session
-      this.claudeSDK.abortQuery(chatId);
+      await this.claudeSDK.abortQuery(chatId);
       
       user.endSession();
       user.clearActiveProject();

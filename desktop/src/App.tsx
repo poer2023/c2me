@@ -8,6 +8,7 @@ import { UsersPanel } from './components/UsersPanel';
 import { SetupWizard } from './components/SetupWizard';
 import { SettingsPage } from './components/SettingsPage';
 import { MessageSimulator } from './components/MessageSimulator';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import './App.css';
 
@@ -640,9 +641,11 @@ function AppContent() {
 
 function App() {
   return (
-    <SettingsProvider>
-      <AppContent />
-    </SettingsProvider>
+    <ErrorBoundary>
+      <SettingsProvider>
+        <AppContent />
+      </SettingsProvider>
+    </ErrorBoundary>
   );
 }
 

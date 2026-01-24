@@ -112,8 +112,8 @@ fn stop_bot_internal(state: &BotState) -> Result<String, String> {
 #[tauri::command]
 async fn get_bot_status(state: State<'_, BotState>) -> Result<BotStatus, String> {
     let (mut is_running, uptime_seconds, pid) = {
-        let process = state.process.lock().unwrap();
-        let start_time = state.start_time.lock().unwrap();
+        let process = state.process.lock().map_err(|e| e.to_string())?;
+        let start_time = state.start_time.lock().map_err(|e| e.to_string())?;
 
         let is_running = process.is_some();
         let uptime_seconds = if let Some(start) = *start_time {
@@ -240,9 +240,9 @@ fn restart_bot(
 }
 
 #[tauri::command]
-fn get_bot_health(state: State<BotState>) -> BotHealth {
-    let process = state.process.lock().unwrap();
-    let start_time = state.start_time.lock().unwrap();
+fn get_bot_health(state: State<BotState>) -> Result<BotHealth, String> {
+    let process = state.process.lock().map_err(|e| e.to_string())?;
+    let start_time = state.start_time.lock().map_err(|e| e.to_string())?;
 
     let is_running = process.is_some();
     let pid = process.as_ref().map(|p| p.id());
@@ -288,13 +288,13 @@ fn get_bot_health(state: State<BotState>) -> BotHealth {
         }
     });
 
-    BotHealth {
+    Ok(BotHealth {
         is_running,
         is_responsive,
         uptime_seconds,
         pid,
         memory_mb,
-    }
+    })
 }
 
 #[tauri::command]
@@ -977,8 +977,10 @@ pub fn run() {
 
                     // Check if bot is already running
                     let is_running = {
-                        let process = state.process.lock().unwrap();
-                        process.is_some()
+                        match state.process.lock() {
+                            Ok(process) => process.is_some(),
+                            Err(_) => false,
+                        }
                     };
 
                     if !is_running {
@@ -1125,8 +1127,10 @@ pub fn run() {
                 app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, _event| {
                     let state: State<BotState> = app_handle.state();
                     let is_running = {
-                        let process = state.process.lock().unwrap();
-                        process.is_some()
+                        match state.process.lock() {
+                            Ok(process) => process.is_some(),
+                            Err(_) => false,
+                        }
                     };
 
                     if is_running {

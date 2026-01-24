@@ -209,9 +209,19 @@ export class TelegramHandler {
       });
     }
 
-    // Execute the actual handler immediately without waiting for tracking
+    // Execute the actual handler with proper error handling
     if (handler) {
-      await handler();
+      try {
+        await handler();
+      } catch (error) {
+        console.error('Handler execution failed:', error);
+        // Send user-friendly error message
+        try {
+          await ctx.reply('❌ An error occurred while processing your request. Please try again.');
+        } catch {
+          // Ignore reply errors
+        }
+      }
     }
   }
 
