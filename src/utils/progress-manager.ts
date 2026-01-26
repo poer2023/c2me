@@ -148,6 +148,14 @@ export class ProgressManager {
     return this.progressMap.get(chatId);
   }
 
+  getStatusMessageId(chatId: number): number | null {
+    const progress = this.progressMap.get(chatId);
+    if (!progress) {
+      return null;
+    }
+    return progress.getStatusMessageId();
+  }
+
   /**
    * Update tool status
    */

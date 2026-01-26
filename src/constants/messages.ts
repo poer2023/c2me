@@ -22,6 +22,7 @@ export const MESSAGES = {
 • /auth - 认证（如需要）
 • /abort - 中止当前查询
 • /clear - 清除会话
+• /resume - 生成终端恢复命令
 • /compact - 压缩对话节省 token
 • /undo - 回退操作
 
@@ -131,7 +132,7 @@ ${sourceSection}
   },
 
   // 状态消息
-  STATUS_TEXT: (userState: string, sessionStatus: string, projectCount: number, activeProjectName: string, activeProjectType: string, activeProjectPath: string, permissionMode: string, authStatus: string, hasClaudeSession: string) =>
+  STATUS_TEXT: (userState: string, sessionStatus: string, projectCount: number, activeProjectName: string, activeProjectType: string, activeProjectPath: string, permissionMode: string, authStatus: string, hasClaudeSession: string, handoffStatus: string) =>
     `📊 当前状态
 
 🔧 **系统状态**
@@ -139,6 +140,7 @@ ${sourceSection}
 会话状态：${sessionStatus}
 认证状态：${authStatus}
 Claude 会话：${hasClaudeSession}
+交接状态：${handoffStatus}
 
 📋 **项目**
 项目总数：${projectCount}
@@ -161,6 +163,7 @@ Claude 会话：${hasClaudeSession}
 /auth [密码] - 认证（如需要）
 /abort - 中止当前 Claude 查询
 /clear - 清除 Claude 会话
+/resume - 生成终端恢复命令
 /compact - 压缩对话节省 token
 /undo - 回退操作
 
@@ -198,6 +201,9 @@ Claude 会话：${hasClaudeSession}
 • 使用 @文件路径 快速引用文件内容
 • 使用 /compact 压缩长对话节省 token
 • 使用 /status 查看当前设置`,
+
+  HANDOFF_ACTIVE_TEXT: (remaining?: string | null) =>
+    `⚠️ 终端交接已启用${remaining ? `（剩余 ${remaining}）` : ''}。如需继续在 Telegram 使用，请 /clear 或等待过期。`,
 
   // 进度消息
   CLONING_REPO: '⏳ 正在克隆仓库...',

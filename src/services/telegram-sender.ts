@@ -81,6 +81,15 @@ export class TelegramSender {
       return await this.safeSendMessage(chatId, message, options);
     }
   }
+
+  async safeEditMessageReplyMarkup(
+    chatId: number,
+    messageId: number,
+    replyMarkup: Record<string, unknown>
+  ): Promise<{ message_id: number }> {
+    await this.bot.telegram.editMessageReplyMarkup(chatId, messageId, undefined, replyMarkup);
+    return { message_id: messageId };
+  }
 }
 
 const map: Record<string, string> = {

@@ -62,7 +62,7 @@ export class TelegramHandler {
     this.messageHandler = new MessageHandler(this.storage, this.github, this.formatter, this.claudeSDK, this.projectHandler, this.bot);
     this.toolHandler = new ToolHandler(this.storage, this.formatter, this.config, this.bot, this.claudeSDK);
     this.fileBrowserHandler = new FileBrowserHandler(this.storage, this.directory, this.formatter, this.config, this.bot);
-    this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.bot, this.permissionManager);
+    this.callbackHandler = new CallbackHandler(this.formatter, this.projectHandler, this.storage, this.fileBrowserHandler, this.config, this.bot, this.permissionManager);
 
     // Initialize progress control handler
     this.progressControlHandler = new ProgressControlHandler(this.bot, this.messageHandler.getProgressManager());
@@ -97,6 +97,7 @@ export class TelegramHandler {
       { command: 'list', description: '项目列表' },
       { command: 'clear', description: '清除会话' },
       { command: 'abort', description: '中止任务' },
+      { command: 'resume', description: '终端继续会话' },
       { command: 'compact', description: '压缩上下文' },
       { command: 'undo', description: '撤销操作' },
       { command: 'model', description: '切换模型' },
@@ -168,6 +169,7 @@ export class TelegramHandler {
 
     this.bot.command('abort', (ctx) => this.withTracking(ctx, 'abort', () => this.commandHandler.handleAbort(ctx)));
     this.bot.command('clear', (ctx) => this.withTracking(ctx, 'clear', () => this.commandHandler.handleClear(ctx)));
+    this.bot.command('resume', (ctx) => this.withTracking(ctx, 'resume', () => this.commandHandler.handleResume(ctx)));
 
     // Permission mode commands
     this.bot.command('default', (ctx) => this.withTracking(ctx, 'default', () => this.commandHandler.handlePermissionModeChange(ctx, PermissionMode.Default)));
@@ -254,6 +256,8 @@ export class TelegramHandler {
   public async handleClaudeMessage(chatId: number, message: ClaudeMessage, toolInfo?: { toolId: string; toolName: string; isToolUse: boolean; isToolResult: boolean }, parentToolUseId?: string): Promise<void> {
     const user = await this.storage.getUserSession(chatId);
     if (!user || !user.sessionId) return;
+
+    await this.messageHandler.maybeAttachResumeButton(chatId, user.sessionId);
 
     if (toolInfo) {
       if (toolInfo.isToolUse) {

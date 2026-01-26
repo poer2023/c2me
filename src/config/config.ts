@@ -39,6 +39,10 @@ export interface SecurityConfig {
   secretToken?: string | undefined;
 }
 
+export interface HandoffConfig {
+  ttlMs: number;
+}
+
 
 
 export interface Config {
@@ -49,6 +53,7 @@ export interface Config {
   webhook?: WebhookConfig;
   workers: WorkersConfig;
   security: SecurityConfig;
+  handoff: HandoffConfig;
 }
 
 function getEnvOrDefault(key: string, defaultValue: string): string {
@@ -110,6 +115,9 @@ export function loadConfig(): Config {
     security: {
       secretRequired: getEnvOrDefault('SECURITY_SECRET_REQUIRED', 'false') === 'true',
       secretToken: process.env.SECURITY_SECRET_TOKEN || undefined,
+    },
+    handoff: {
+      ttlMs: parseDuration(getEnvOrDefault('HANDOFF_TTL', '20m')),
     },
   };
 

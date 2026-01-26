@@ -1,4 +1,4 @@
-import { UserState, PermissionMode, FileBrowsingState } from './types';
+import { UserState, PermissionMode, FileBrowsingState, HandoffOwner } from './types';
 
 export interface UserSession {
   chatId: number;
@@ -15,6 +15,10 @@ export interface UserSession {
   sessionId?: string;
   projectPath: string;
   active: boolean;
+
+  // Terminal handoff management
+  handoffOwner?: HandoffOwner;
+  handoffExpiresAt?: number;
   
   // Permission management
   permissionMode: PermissionMode;
@@ -37,6 +41,8 @@ export class UserSessionModel {
   permissionMode: PermissionMode;
   fileBrowsingState?: FileBrowsingState;
   authenticated: boolean;
+  handoffOwner?: HandoffOwner;
+  handoffExpiresAt?: number;
 
   constructor(chatId: number) {
     this.chatId = chatId;
@@ -47,6 +53,8 @@ export class UserSessionModel {
     this.active = false;
     this.permissionMode = PermissionMode.Default;
     this.authenticated = false;
+    this.handoffOwner = undefined;
+    this.handoffExpiresAt = undefined;
   }
 
   setActive(active: boolean): void {
@@ -98,6 +106,51 @@ export class UserSessionModel {
     return this.active && !!this.sessionId;
   }
 
+  setHandoffOwner(owner: HandoffOwner, ttlMs: number): void {
+    this.handoffOwner = owner;
+    this.handoffExpiresAt = Date.now() + ttlMs;
+    this.updateActivity();
+  }
+
+  clearHandoff(): void {
+    delete this.handoffOwner;
+    delete this.handoffExpiresAt;
+    this.updateActivity();
+  }
+
+  clearExpiredHandoff(now: number = Date.now()): boolean {
+    if (!this.handoffExpiresAt) {
+      return false;
+    }
+    if (this.handoffExpiresAt > now) {
+      return false;
+    }
+    delete this.handoffOwner;
+    delete this.handoffExpiresAt;
+    return true;
+  }
+
+  isHandoffActive(now: number = Date.now()): boolean {
+    if (!this.handoffOwner || !this.handoffExpiresAt) {
+      return false;
+    }
+    return this.handoffExpiresAt > now;
+  }
+
+  getHandoffOwner(now: number = Date.now()): HandoffOwner | null {
+    if (!this.isHandoffActive(now)) {
+      return null;
+    }
+    return this.handoffOwner || null;
+  }
+
+  getHandoffExpiresAt(now: number = Date.now()): number | null {
+    if (!this.isHandoffActive(now)) {
+      return null;
+    }
+    return this.handoffExpiresAt || null;
+  }
+
   // Permission mode methods
   setPermissionMode(mode: PermissionMode): void {
     this.permissionMode = mode;
@@ -145,7 +198,9 @@ export class UserSessionModel {
       active: this.active,
       permissionMode: this.permissionMode,
       fileBrowsingState: this.fileBrowsingState,
-      authenticated: this.authenticated
+      authenticated: this.authenticated,
+      handoffOwner: this.handoffOwner,
+      handoffExpiresAt: this.handoffExpiresAt
     };
   }
 
@@ -165,6 +220,12 @@ export class UserSessionModel {
       userSession.fileBrowsingState = data.fileBrowsingState as FileBrowsingState;
     }
     userSession.authenticated = (data.authenticated as boolean) || false;
+    if (data.handoffOwner) {
+      userSession.handoffOwner = data.handoffOwner as HandoffOwner;
+    }
+    if (data.handoffExpiresAt) {
+      userSession.handoffExpiresAt = data.handoffExpiresAt as number;
+    }
     
     return userSession;
   }

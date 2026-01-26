@@ -10,6 +10,7 @@ import { ClaudeManager } from '../../claude';
 import { AuthService } from '../../../services/auth-service';
 import { Config } from '../../../config/config';
 import { TelegramSender } from '../../../services/telegram-sender';
+import { buildResumeCommand, formatResumeMessage, formatRemainingDuration } from '../../../utils/terminal-handoff';
 
 export class CommandHandler {
   private authService: AuthService;
@@ -176,6 +177,16 @@ export class CommandHandler {
       ? (user.isAuthenticated() ? 'Authenticated' : 'Not authenticated')
       : 'Not required';
 
+    if (user.clearExpiredHandoff()) {
+      await this.storage.saveUserSession(user);
+    }
+
+    const handoffOwner = user.getHandoffOwner();
+    const handoffExpiresAt = user.getHandoffExpiresAt();
+    const handoffStatus = handoffOwner === 'terminal'
+      ? `Terminal${handoffExpiresAt ? ` (${formatRemainingDuration(handoffExpiresAt - Date.now())})` : ''}`
+      : 'Telegram';
+
     const statusText = MESSAGES.STATUS_TEXT(
       user.state,
       sessionStatus,
@@ -185,9 +196,33 @@ export class CommandHandler {
       activeProjectPath,
       user.permissionMode,
       authStatus,
-      user.sessionId ? 'Yes' : 'No'
+      user.sessionId ? 'Yes' : 'No',
+      handoffStatus
     );
     await this.telegramSender.safeSendMessage(ctx.chat.id, statusText);
+  }
+
+  async handleResume(ctx: Context): Promise<void> {
+    if (!ctx.chat) return;
+
+    const chatId = ctx.chat.id;
+    const user = await this.storage.getUserSession(chatId);
+
+    if (!user || !user.sessionId) {
+      await this.telegramSender.safeSendMessage(chatId, 'No active session to resume.');
+      return;
+    }
+
+    user.setHandoffOwner('terminal', this.config.handoff.ttlMs);
+    await this.storage.saveUserSession(user);
+
+    const command = buildResumeCommand({
+      binaryPath: this.config.claudeCode.binaryPath || 'claude',
+      sessionId: user.sessionId,
+      projectPath: user.projectPath
+    });
+
+    await this.telegramSender.safeSendMessage(chatId, formatResumeMessage(command));
   }
 
 
@@ -205,6 +240,7 @@ export class CommandHandler {
 
     try {
       delete user.sessionId;
+      user.clearHandoff();
       await this.storage.saveUserSession(user);
       await this.claudeSDK.abortQuery(chatId);
 
@@ -228,6 +264,9 @@ export class CommandHandler {
 
     try {
       const success = await this.claudeSDK.abortQuery(chatId);
+
+      user.clearHandoff();
+      await this.storage.saveUserSession(user);
 
       if (success) {
         await ctx.reply('🛑 Query aborted successfully. You can send a new message now.');

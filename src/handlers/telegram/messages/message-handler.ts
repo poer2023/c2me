@@ -14,6 +14,7 @@ import { incrementCounter, startTiming } from '../../../utils/metrics';
 import { downloadTelegramImage, buildMessageContent } from '../../../utils/image-handler';
 import { getMessageStore } from '../../../services/message-store';
 import { ToolHandler } from '../tools/tool-handler';
+import { formatRemainingDuration } from '../../../utils/terminal-handoff';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -22,6 +23,7 @@ export class MessageHandler {
   private telegramSender: TelegramSender;
   private progressManager: ProgressManager;
   private toolHandler: ToolHandler | null = null;
+  private resumeKeyboardCache: Map<number, string> = new Map();
 
   constructor(
     private storage: IStorage,
@@ -73,6 +75,11 @@ export class MessageHandler {
     const user = await this.storage.getUserSession(chatId);
     if (!user) {
       await this.sendHelp(ctx);
+      return;
+    }
+
+    if (await this.blockIfTerminalHandoff(ctx, user)) {
+      stopTimer();
       return;
     }
 
@@ -138,6 +145,11 @@ export class MessageHandler {
       return;
     }
 
+    if (await this.blockIfTerminalHandoff(ctx, user)) {
+      stopTimer();
+      return;
+    }
+
     // Only process photos when in session or idle (to start a new session)
     if (user.state !== UserState.InSession && user.state !== UserState.Idle) {
       await ctx.reply('Please complete your current operation first, then send the image.');
@@ -186,9 +198,10 @@ export class MessageHandler {
       }
 
       // Send status message
+      this.resumeKeyboardCache.delete(user.chatId);
       const statusMessage = await ctx.reply(
         '⏳ Processing (0s)',
-        KeyboardFactory.createCompletionKeyboard()
+        this.createExecutionKeyboard(user)
       );
 
       // Start progress tracking
@@ -253,6 +266,11 @@ export class MessageHandler {
       return;
     }
 
+    if (await this.blockIfTerminalHandoff(ctx, user)) {
+      stopTimer();
+      return;
+    }
+
     // Only process documents when in session or idle
     if (user.state !== UserState.InSession && user.state !== UserState.Idle) {
       await ctx.reply('Please complete your current operation first, then send the file.');
@@ -313,9 +331,10 @@ export class MessageHandler {
       }
 
       // Send status message
+      this.resumeKeyboardCache.delete(user.chatId);
       const statusMessage = await ctx.reply(
         '⏳ Processing (0s)',
-        KeyboardFactory.createCompletionKeyboard()
+        this.createExecutionKeyboard(user)
       );
 
       // Start progress tracking
@@ -406,9 +425,10 @@ export class MessageHandler {
       }
 
       // Send initial status message and get message ID
+      this.resumeKeyboardCache.delete(user.chatId);
       const statusMessage = await ctx.reply(
         '⏳ Processing (0s)',
-        KeyboardFactory.createCompletionKeyboard()
+        this.createExecutionKeyboard(user)
       );
 
       // Start progress tracking
@@ -456,9 +476,65 @@ export class MessageHandler {
     }
   }
 
+  async maybeAttachResumeButton(chatId: number, sessionId: string): Promise<void> {
+    if (!sessionId) return;
+
+    const lastSessionId = this.resumeKeyboardCache.get(chatId);
+    if (lastSessionId === sessionId) return;
+
+    const messageId = this.progressManager.getStatusMessageId(chatId);
+    if (!messageId) return;
+
+    const keyboard = KeyboardFactory.createExecutionKeyboard({
+      canStop: true,
+      canExpand: Boolean(this.toolHandler),
+      sessionId
+    });
+
+    try {
+      await this.telegramSender.safeEditMessageReplyMarkup(
+        chatId,
+        messageId,
+        keyboard.reply_markup
+      );
+      this.resumeKeyboardCache.set(chatId, sessionId);
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      if (!errorMsg.includes('message can\'t be edited') && !errorMsg.includes('message to edit not found')) {
+        console.error('Failed to update resume keyboard:', error);
+      }
+    }
+  }
+
+  private async blockIfTerminalHandoff(ctx: Context, user: UserSessionModel): Promise<boolean> {
+    if (user.clearExpiredHandoff()) {
+      await this.storage.saveUserSession(user);
+    }
+
+    if (user.getHandoffOwner() !== 'terminal') {
+      return false;
+    }
+
+    const expiresAt = user.getHandoffExpiresAt();
+    const remaining = expiresAt ? formatRemainingDuration(expiresAt - Date.now()) : null;
+    await this.telegramSender.safeSendMessage(
+      user.chatId,
+      MESSAGES.HANDOFF_ACTIVE_TEXT(remaining)
+    );
+    return true;
+  }
+
   private async sendHelp(ctx: Context): Promise<void> {
     const helpText = MESSAGES.HELP_TEXT;
     await ctx.reply(helpText);
+  }
+
+  private createExecutionKeyboard(user: UserSessionModel): ReturnType<typeof KeyboardFactory.createExecutionKeyboard> {
+    return KeyboardFactory.createExecutionKeyboard({
+      canStop: true,
+      canExpand: Boolean(this.toolHandler),
+      sessionId: user.sessionId
+    });
   }
 
   /**
@@ -481,9 +557,10 @@ export class MessageHandler {
       await this.storage.saveUserSession(user);
 
       // Send initial status message
+      this.resumeKeyboardCache.delete(user.chatId);
       const statusMessage = await ctx.reply(
         '⏳ Processing (0s)',
-        KeyboardFactory.createCompletionKeyboard()
+        this.createExecutionKeyboard(user)
       );
 
       // Start progress tracking

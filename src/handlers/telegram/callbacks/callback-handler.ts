@@ -10,20 +10,27 @@ import { ClaudeManager } from '../../claude';
 import { incrementCounter } from '../../../utils/metrics';
 import { VALID_MODEL_IDS } from '../../../constants/models';
 import { ToolHandler } from '../tools/tool-handler';
+import { TelegramSender } from '../../../services/telegram-sender';
+import { Config } from '../../../config/config';
+import { buildResumeCommand, formatResumeMessage } from '../../../utils/terminal-handoff';
 
 export class CallbackHandler {
   private progressControlHandler: ProgressControlHandler | null = null;
   private claudeSDK: ClaudeManager | null = null;
   private toolHandler: ToolHandler | null = null;
+  private telegramSender: TelegramSender;
 
   constructor(
     private formatter: MessageFormatter,
     private projectHandler: ProjectHandler,
     private storage: IStorage,
     private fileBrowserHandler: FileBrowserHandler,
+    private config: Config,
     private bot: Telegraf,
     private permissionManager: PermissionManager
-  ) {}
+  ) {
+    this.telegramSender = new TelegramSender(bot);
+  }
 
   /**
    * Set Claude SDK manager for model switching
@@ -91,12 +98,12 @@ export class CallbackHandler {
   }
 
   /**
-   * Handle execution control callbacks (stop, expand)
+   * Handle execution control callbacks (stop, expand, resume)
    */
   private async handleExecutionCallback(data: string, chatId: number, messageId?: number): Promise<void> {
     const parts = data.split(':');
-    const action = parts[1]; // stop or expand
-    // const sessionId = parts[2]; // optional session ID (reserved for future use)
+    const action = parts[1];
+    const sessionId = parts[2];
 
     switch (action) {
       case 'stop':
@@ -104,6 +111,9 @@ export class CallbackHandler {
         break;
       case 'expand':
         await this.handleExpandDetails(chatId, messageId);
+        break;
+      case 'resume':
+        await this.handleResumeCommand(chatId, sessionId);
         break;
       default:
         console.warn(`Unknown execution action: ${action}`);
@@ -170,6 +180,34 @@ export class CallbackHandler {
     } catch (error) {
       console.error('Error expanding details:', error);
       await this.bot.telegram.sendMessage(chatId, this.formatter.formatError('Failed to expand details'));
+    }
+  }
+
+  private async handleResumeCommand(chatId: number, sessionId?: string): Promise<void> {
+    try {
+      const user = await this.storage.getUserSession(chatId);
+      const resolvedSessionId = sessionId || user?.sessionId;
+
+      if (!resolvedSessionId) {
+        await this.telegramSender.safeSendMessage(chatId, 'No active session to resume.');
+        return;
+      }
+
+      if (user) {
+        user.setHandoffOwner('terminal', this.config.handoff.ttlMs);
+        await this.storage.saveUserSession(user);
+      }
+
+      const command = buildResumeCommand({
+        binaryPath: this.config.claudeCode.binaryPath || 'claude',
+        sessionId: resolvedSessionId,
+        projectPath: user?.projectPath
+      });
+
+      await this.telegramSender.safeSendMessage(chatId, formatResumeMessage(command));
+    } catch (error) {
+      console.error('Error creating resume command:', error);
+      await this.telegramSender.safeSendMessage(chatId, this.formatter.formatError('Failed to generate resume command.'));
     }
   }
 

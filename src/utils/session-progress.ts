@@ -101,6 +101,10 @@ export class SessionProgress {
     await this.updateStatusMessage();
   }
 
+  getStatusMessageId(): number | null {
+    return this.isActive ? this.statusMessageId : null;
+  }
+
   /**
    * Start all intervals
    */

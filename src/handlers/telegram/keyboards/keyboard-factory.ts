@@ -35,6 +35,10 @@ export class KeyboardFactory {
       buttons.push(Markup.button.callback('📋 Details', expandCallback));
     }
 
+    if (options.sessionId) {
+      buttons.push(Markup.button.callback('💻 Resume in Terminal', `exec:resume:${options.sessionId}`));
+    }
+
     if (buttons.length === 0) {
       return Markup.inlineKeyboard([]);
     }

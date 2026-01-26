@@ -101,6 +101,8 @@ export enum PermissionMode {
   BypassPermissions = 'bypassPermissions'
 }
 
+export type HandoffOwner = 'telegram' | 'terminal';
+
 export interface UserStats {
   totalUsers: number;
   activeUsers: number;
